@@ -1,0 +1,89 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "Build all (MinGW)",
+            "command": "c:\\msys64\\msys2_shell.cmd",
+            "args": [
+                "-defterm",
+                "-no-start",
+                "-ucrt64",
+                "-where",
+                "${workspaceFolder}",
+                "-c",
+                "./build.sh --reconfigure"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": { "INSTALL_DIR": "/c/install" }
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "type": "cppbuild",
+            "label": "Clean (MinGW)",
+            "command": "c:\\msys64\\msys2_shell.cmd",
+            "args": [
+                "-defterm",
+                "-no-start",
+                "-ucrt64",
+                "-where",
+                "${workspaceFolder}",
+                "-c",
+                "./build.sh --clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": { "INSTALL_DIR": "/c/install" }
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "type": "cppbuild",
+            "label": "Build all (MSVC)",
+            "command": "build.bat",
+            "args": ["--rebuild"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "type": "cppbuild",
+            "label": "Clean (MSVC)",
+            "command": "build.bat",
+            "args": [
+                "--clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    "version": "2.0.0"
+}

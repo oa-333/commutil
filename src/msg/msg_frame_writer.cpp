@@ -1,5 +1,6 @@
 #include "msg/msg_frame_writer.h"
 
+#include <cstring>
 #include <gzip/compress.hpp>
 #include <vector>
 

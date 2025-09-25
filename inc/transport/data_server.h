@@ -21,8 +21,8 @@ namespace commutil {
 class COMMUTIL_API DataServer;
 
 struct COMMUTIL_API ServerBufferData {
-    ServerBufferData(DataServer* dataServer = nullptr, uint64_t connectionIndex = 0,
-                     const uv_buf_t& buf = {0, nullptr}, bool shouldDeallocateBuffer = false)
+    ServerBufferData(DataServer* dataServer, uint64_t connectionIndex, const uv_buf_t& buf,
+                     bool shouldDeallocateBuffer = false)
         : m_dataServer(dataServer),
           m_connectionIndex(connectionIndex),
           m_buf(buf),

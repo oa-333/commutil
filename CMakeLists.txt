@@ -68,9 +68,7 @@ elseif(MINGW)
     target_link_libraries(commutil ws2_32)
     target_compile_options(commutil PRIVATE -Wall)
 else()
-    #target_link_libraries(commutil unwind)
     target_compile_options(commutil PRIVATE -Wall)
-    #add_link_options(-rdynamic)
 endif()
 
 #############################################################

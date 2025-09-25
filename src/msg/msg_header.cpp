@@ -1,5 +1,7 @@
 #include "msg/msg_header.h"
 
+#include <cstring>
+
 namespace commutil {
 
 const char COMMUTIL_MSG_MAGIC[] = {'C', 'O', 'M', 'U', 'M', 'E', 'S', 'G'};

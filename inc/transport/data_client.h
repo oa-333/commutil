@@ -27,7 +27,7 @@ namespace commutil {
 class COMMUTIL_API DataClient;
 
 struct COMMUTIL_API ClientBufferData {
-    ClientBufferData(DataClient* dataClient = nullptr, const uv_buf_t& buf = {0, nullptr},
+    ClientBufferData(DataClient* dataClient, const uv_buf_t& buf,
                      bool shouldDeallocateBuffer = false)
         : m_dataClient(dataClient), m_buf(buf), m_shouldDeallocateBuffer(shouldDeallocateBuffer) {}
     ClientBufferData(const ClientBufferData&) = delete;

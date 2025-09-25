@@ -48,7 +48,7 @@ ErrorCode DataClient::terminate() {
     // terminate transport layer
     ErrorCode rc = terminateTransport();
     if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to terminate transport: %s", error_status_t(rc));
+        LOG_ERROR("Failed to terminate transport: %s", errorCodeToString(rc));
         return rc;
     }
 

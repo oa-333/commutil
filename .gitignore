@@ -1,0 +1,16 @@
+**/*.o
+**/*.obj
+**/*.lib
+**/*.exp
+**/*.ilk
+**/*.dep
+**/*.dll
+**/*.so
+**/*.pdb
+**/*.a
+cmake_build/**
+cmake_build/**/*
+bin/**/*
+build/**/*
+vcpkg.json
+CMakeUserPresets.json

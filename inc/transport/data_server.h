@@ -119,12 +119,13 @@ public:
 
 protected:
     DataServer(ByteOrder byteOrder)
-        : m_byteOrder(byteOrder),
-          m_dataListener(nullptr),
+        : m_dataAllocator(nullptr),
+          m_connDataArray(nullptr),
           m_maxConnections(0),
+          m_dataListener(nullptr),
+          m_byteOrder(byteOrder),
           m_bufferSize(0),
           m_transport(nullptr),
-          m_connDataArray(nullptr),
           m_nextConnectionId(0),
           m_runState(RunState::RS_IDLE) {}
     DataServer(const DataServer&) = delete;
@@ -187,27 +188,32 @@ protected:
     // handle close event
     void onClose(uv_handle_t* handle);
 
-    ByteOrder m_byteOrder;
-    DataListener* m_dataListener;
-    uint32_t m_maxConnections;
-    uint32_t m_bufferSize;
+    // members exposed to derived classes
     DataServerAllocator* m_dataAllocator;
-    DataServerAllocator m_defaultDataAllocator;
-    uv_loop_t m_serverLoop;
-    uv_handle_t* m_transport;
     ConnectionData** m_connDataArray;
+    uint32_t m_maxConnections;
+    uv_loop_t m_serverLoop;
+    DataListener* m_dataListener;
+
+    ConnectionData* grabConnectionData();
+
+    enum class RunState : uint32_t { RS_IDLE, RS_STARTING_UP, RS_RUNNING, RS_SHUTTING_DOWN };
+    RunState getRunState();
+
+private:
+    ByteOrder m_byteOrder;
+    uint32_t m_bufferSize;
+    DataServerAllocator m_defaultDataAllocator;
+    uv_handle_t* m_transport;
     std::atomic<uint64_t> m_nextConnectionId;
 
     bool initConnDataArray(uint32_t maxConnections);
     void termConnDataArray();
-    ConnectionData* grabConnectionData();
 
-    enum class RunState : uint32_t { RS_IDLE, RS_STARTING_UP, RS_RUNNING, RS_SHUTTING_DOWN };
     std::atomic<RunState> m_runState;
 
     bool changeRunState(RunState from, RunState to);
     void setRunState(RunState runState);
-    RunState getRunState();
 
     std::thread m_serverThread;
     void serverTask();

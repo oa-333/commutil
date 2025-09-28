@@ -34,7 +34,6 @@ ErrorCode TcpClient::startStreamTransport() {
     }
 
     // issue connect to server
-    // TODO: periodic reconnect attempts should take place
     connectReq->data = this;
     res =
         uv_tcp_connect(connectReq, &m_socketHandle, (const struct sockaddr*)&dest, onConnectStatic);

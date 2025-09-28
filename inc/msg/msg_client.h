@@ -18,6 +18,7 @@
 
 namespace commutil {
 
+/** @brief A messaging client that runs on top of a data client (transport layer provider). */
 class COMMUTIL_API MsgClient : public MsgListener {
 public:
     MsgClient() : m_dataClient(nullptr), m_listener(nullptr) {}
@@ -46,7 +47,10 @@ public:
     /** @brief Stops the message client. */
     ErrorCode stop();
 
-    /** @brief Installs a data loop listener. */
+    /**
+     * @brief Installs a data loop listener, which allows integrating with the IO loop, and
+     * reacting to loop events.
+     */
     inline void setDataLoopListener(DataLoopListener* listener) {
         m_dataClient->setDataLoopListener(listener);
     }

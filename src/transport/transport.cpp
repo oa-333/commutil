@@ -29,7 +29,9 @@ struct TerminateData {
     void* m_data;
 };
 
-void close_cb(uv_handle_t* handle) { LOG_DEBUG("libuv handle %u closed", (int)handle->type); }
+void close_cb(uv_handle_t* handle) {
+    LOG_DEBUG("libuv handle %p (type %u) closed", (void*)handle, (int)handle->type);
+}
 
 void walk_and_close(uv_handle_t* handle, void* arg) {
     (void)arg;

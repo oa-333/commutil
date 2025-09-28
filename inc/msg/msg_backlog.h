@@ -1,15 +1,11 @@
 #ifndef __MSG_BACKLOG_H__
 #define __MSG_BACKLOG_H__
 
-#include <map>
-#include <queue>
 #include <set>
 #include <unordered_map>
-#include <vector>
 
 #include "comm_util_def.h"
 #include "comm_util_log.h"
-#include "msg.h"
 #include "msg_request_pool.h"
 
 namespace commutil {
@@ -43,10 +39,6 @@ public:
      */
     ErrorCode pruneBacklog(uint64_t maxBacklogSizeBytes);
 
-    // TODO: add API for
-    // query request set min item for resend due time
-    // update item (pop from heap update resend time and put back in heap)
-
     /**
      * @brief Queries Whether the backlog has any request ready for resend according to the given
      * time barrier (normally that would be the current time).
@@ -63,16 +55,6 @@ public:
      * been updated).
      */
     void updateReadyResendRequest();
-
-    /** @brief Traverses all pending requests with an external visitor. */
-    /*template <typename Visitor>
-    inline void forEachRequest(Visitor visitor) const {
-        for (const BacklogEntry& entry : m_backlog) {
-            if (!visitor(entry.m_request)) {
-                break;
-            }
-        }
-    }*/
 
 private:
     uint64_t m_backlogSizeBytes;
@@ -126,8 +108,6 @@ private:
     typedef std::set<BacklogEntry, EntryResendTimeCmp> MinHeap;
     MinHeap m_minHeap;
 
-    RequestSet::iterator findRequestByTime(uint64_t requestTimeMillis, Msg* request);
-
     // comparator for set.equal_range
     struct RequestTimeCompare {
         uint64_t m_requestTimeMillis;
@@ -157,6 +137,8 @@ private:
             return resendTime.m_resendTimeMillis < entry.m_request->getResendTime();
         }
     };
+
+    RequestSet::iterator findRequestByTime(uint64_t requestTimeMillis, Msg* request);
 
     DECLARE_CLASS_LOGGER(Msg)
 };

@@ -62,13 +62,6 @@ ErrorCode DataClient::terminate() {
 }
 
 ErrorCode DataClient::start() {
-    /*if (!startTransport()) {
-        LOG_ERROR("Failed to start data client running, transport layer error");
-        return false;
-    }*/
-
-    // start IO thread before waiting to possible connect request to finish, otherwise the connect
-    // notification will never arrive since it is fired from the IO loop
     m_ioThread = std::thread(&DataClient::ioTask, this);
     return ErrorCode::E_OK;
 }
@@ -80,18 +73,6 @@ ErrorCode DataClient::stop() {
         return rc;
     }
     return ErrorCode::E_OK;
-
-#if 0
-    // next we stop the loop
-    uv_stop(&m_clientLoop);
-
-    // now we can join the IO thread
-    m_ioThread.join();
-
-    // finally we close the client handle
-    uv_close(m_transport, onCloseStatic);
-    return true;
-#endif
 }
 
 bool DataClient::isReady() {
@@ -144,7 +125,7 @@ ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall,
     }
     clientBufferData->m_userData = userData;
 
-    // TODO: async request is required for all clients - so pull this up from udp client
+    // send async write request (I/O can take place only within the loop context)
     ErrorCode rc = sendWriteRequest(clientBufferData);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send write request on transport: %s", errorCodeToString(rc));

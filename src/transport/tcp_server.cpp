@@ -112,47 +112,15 @@ ErrorCode TcpServer::initTcpServer() {
 
     // defer listen until last pipe connect
     m_connectedPipes = 0;
-    /*res = uv_listen((uv_stream_t*)&m_server, m_backlog, onNewConnectionStatic);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_ip4_addr, res,
-                         "Failed to listen to incoming connections at address/port: %s/%d",
-                         m_serverAddress.c_str(), m_port);
-        (void)termTcpServer();
-        return false;
-    }*/
-
     return ErrorCode::E_OK;
 }
 
 ErrorCode TcpServer::termTcpServer() {
-    ErrorCode rc = ErrorCode::E_OK;
-    // int res = 0;
-    switch (m_serverState) {
-        case ServerState::SS_INIT:
-            uv_close((uv_handle_t*)&m_server, nullptr);
-            COMMUTIL_FALLTHROUGH;
-
-        case ServerState::SS_LOOP_INIT:
-            /*res = uv_loop_close(&m_serverLoop);
-            if (res < 0) {
-                LOG_UV_ERROR(uv_loop_close, res, "Failed to close TCP server loop");
-                rc = ErrorCode::E_TRANSPORT_ERROR;
-            }*/
-            break;
-
-        // TODO: check this case carefully, is there any required termination?
-        case ServerState::SS_TCP_INIT:
-            COMMUTIL_FALLTHROUGH;
-
-        case ServerState::SS_UNINIT:
-            // unexpected, but silently ignored
-            break;
-
-        default:
-            break;
+    if (m_serverState == ServerState::SS_INIT) {
+        uv_close((uv_handle_t*)&m_server, nullptr);
     }
     m_serverState = ServerState::SS_UNINIT;
-    return rc;
+    return ErrorCode::E_OK;
 }
 
 ErrorCode TcpServer::initPipeServer() {
@@ -263,7 +231,6 @@ ErrorCode TcpServer::initIOTask(uint32_t id) {
 }
 
 ErrorCode TcpServer::termIOTask(uint32_t id) {
-    // TODO: review this
     IOTaskData& ioTask = m_ioTasks[id];
     ErrorCode rc = stopTransportLoop(&ioTask.m_ioLoop, ioTask.m_ioTask, true);
     if (rc != ErrorCode::E_OK) {
@@ -272,38 +239,6 @@ ErrorCode TcpServer::termIOTask(uint32_t id) {
     }
     ioTask.m_state = IOTaskState::TS_UNINIT;
     return ErrorCode::E_OK;
-#if 0
-    bool rc = true;
-    int res = 0;
-    switch (ioTask.m_state) {
-        case IOTaskState::TS_SERVER_PIPE_INIT:
-            // uv_close((uv_handle_t*)&ioTask.m_serverPipe, nullptr);
-            COMMUTIL_FALLTHROUGH;
-
-        case IOTaskState::TS_INIT:
-            uv_close((uv_handle_t*)&ioTask.m_clientPipe, nullptr);
-            COMMUTIL_FALLTHROUGH;
-
-        case IOTaskState::TS_LOOP_INIT:
-            uv_stop(&ioTask.m_ioLoop);
-            ioTask.m_ioTask.join();
-            res = uv_loop_close(&ioTask.m_ioLoop);
-            if (res < 0) {
-                LOG_UV_ERROR(uv_loop_close, res, "Failed to close IO task loop");
-                rc = false;
-            }
-            break;
-
-        case IOTaskState::TS_UNINIT:
-            // unexpected but silently ignored
-            break;
-
-        default:
-            break;
-    }
-    ioTask.m_state = IOTaskState::TS_UNINIT;
-    return rc;
-#endif
 }
 
 void TcpServer::ioTask(uint32_t id) {

@@ -105,56 +105,6 @@ ErrorCode UdpServer::writeTransport(ServerBufferData* serverBufferData) {
         return ErrorCode::E_TRANSPORT_ERROR;
     }
     return ErrorCode::E_OK;
-#if 0
-    ConnectionData* connData = m_connDataArray[serverBufferData->m_connectionIndex];
-    uv_async_t* asyncReq = m_dataAllocator->allocateAsyncRequest();
-    if (asyncReq == nullptr) {
-        LOG_ERROR("Failed to allocate asynchronous request, out of memory");
-        return false;
-    }
-    int res = uv_async_init(connData->m_connectionHandle->loop, asyncReq, onAsyncSendStatic);
-    if (res != 0) {
-        LOG_UV_ERROR(uv_async_init, res,
-                             "Cannot send write request, failed to initialize async request");
-        m_dataAllocator->freeAsyncRequest(asyncReq);
-        return false;
-    }
-
-    asyncReq->data = serverBufferData;
-    res = uv_async_send(asyncReq);
-    if (res != 0) {
-        LOG_UV_ERROR(uv_async_send, res,
-                             "Cannot send write request, failed to send async request");
-        m_dataAllocator->freeAsyncRequest(asyncReq);
-        return false;
-    }
-    return true;
-#endif
-#if 0
-    ConnectionData* connData = m_connDataArray[serverBufferData->m_connectionIndex];
-    IpConnectionDetails* connectionDetails = (IpConnectionDetails*)connData->m_connectionDetails;
-    struct sockaddr_in dest;
-    int res = uv_ip4_addr(connectionDetails->getHostName(), connectionDetails->getPort(), &dest);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_ip4_addr, res, "Failed to prepare UDP address");
-        return false;
-    }
-
-    uv_udp_send_t* sendReq = new (std::nothrow) uv_udp_send_t();
-    if (sendReq == nullptr) {
-        LOG_ERROR("Failed to allocate UDP send request, out of memory");
-        return false;
-    }
-    sendReq->data = serverBufferData;
-    res = uv_udp_send(sendReq, &m_socketHandle, buffer, 1, (const struct sockaddr*)&dest,
-                      onSendStatic);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_udp_send, res, "Failed to send UDP reply message");
-        return false;
-    }
-
-    return true;
-#endif
 }
 
 UdpServer::ConnectionData* UdpServer::createConnectionData() {
@@ -166,15 +116,6 @@ UdpServer::ConnectionData* UdpServer::createConnectionData() {
     }
     return connData;
 }
-
-#if 0
-void UdpServer::onAsyncSendStatic(uv_async_t* asyncReq) {
-    ServerBufferData* serverBufferData = (ServerBufferData*)asyncReq->data;
-    UdpServer* dataServer = (UdpServer*)serverBufferData->m_dataServer;
-    dataServer->onAsyncSend(serverBufferData);
-    dataServer->m_dataAllocator->freeAsyncRequest(asyncReq);
-}
-#endif
 
 void UdpServer::onRecvStatic(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
                              const struct sockaddr* addr, unsigned flags) {
@@ -238,7 +179,6 @@ void UdpServer::onRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     UdpServer* dataServer = (UdpServer*)(DataServer*)handle->data;
     if (newConnection) {
         m_dataListener->onConnect(connData->m_connectionDetails, 0);
-        // TODO: add timer and implement connection expiry and fire disconnect
     }
     dataServer->onRead(connData, nread, buf, true, false);
 }
@@ -263,30 +203,5 @@ void UdpServer::onTimer(uv_timer_t* handle) {
         }
     }
 }
-
-#if 0
-void UdpServer::onAsyncSend(ServerBufferData* serverBufferData) {
-    ConnectionData* connData = m_connDataArray[serverBufferData->m_connectionIndex];
-    IpConnectionDetails* connectionDetails = (IpConnectionDetails*)connData->m_connectionDetails;
-    struct sockaddr_in dest;
-    int res = uv_ip4_addr(connectionDetails->getHostName(), connectionDetails->getPort(), &dest);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_ip4_addr, res, "Failed to prepare UDP address");
-        return;
-    }
-
-    uv_udp_send_t* sendReq = m_dataAllocator->allocateUdpSendRequest();
-    if (sendReq == nullptr) {
-        LOG_ERROR("Failed to allocate UDP send request, out of memory");
-        return;
-    }
-    sendReq->data = serverBufferData;
-    res = uv_udp_send(sendReq, &m_socketHandle, &serverBufferData->m_buf, 1,
-                      (const struct sockaddr*)&dest, onSendStatic);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_udp_send, res, "Failed to send UDP reply message");
-    }
-}
-#endif
 
 }  // namespace commutil

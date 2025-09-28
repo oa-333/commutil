@@ -126,37 +126,6 @@ protected:
      */
     ErrorCode getSession(const ConnectionDetails& connectionDetails, Session** session);
 
-#if 0
-    /**
-     * @brief Handles a message. Subclasses are responsible for actual deserialization. The message
-     * server provides only framing services.
-     * @param connectionDetails The client's connection details.
-     * @param msgHeader The header of the incoming meta-message.
-     * @param msgBuffer The message buffer. Valid only if status is zero.
-     * @param bufferSize The buffer length. Valid only if status is zero.
-     * @param lastInBatch Designates whether this is the last message within a message batch. In
-     * case of a single message this is always true.
-     * @param batchSize The number of messages in the message batch. In case of a single message
-     * this is always 1.
-     * @return True if message handling within a batch should continue, otherwise deriving
-     * sub-classes should return false (e.g. irrecoverable deserialization error), in which case
-     * @ref handleMsgError() is NOT called, and if some error status needs to be sent to the client,
-     * then deriving sub-classes are responsible for that.
-     */
-    virtual bool handleMsg(const ConnectionDetails& connectionDetails, const MsgHeader& msgHeader,
-                           const char* msgBuffer, uint32_t bufferSize, bool lastInBatch,
-                           uint32_t batchSize) = 0;
-
-    /**
-     * @brief Handle errors during message unpacking.
-     * @param connectionDetails The client's connection details.
-     * @param msgHeader The header of the incoming meta-message.
-     * @param status Deserialization error status.
-     */
-    virtual void handleMsgError(const ConnectionDetails& connectionDetails,
-                                const MsgHeader& msgHeader, int status) = 0;
-#endif
-
     /**
      * @brief Sends a reply to a specific client. Use this API for server initiated communication
      * (e.g. push notifications).

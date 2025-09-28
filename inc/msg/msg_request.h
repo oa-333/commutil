@@ -151,6 +151,7 @@ public:
     /** @brief Clears response data and marks the request as vacant for use. */
     void clearResponse();
 
+    /** @brief Retrieves the request id associated with the request. */
     inline uint64_t getRequestId() const { return m_requestId; }
 
 private:

@@ -26,7 +26,7 @@ ErrorCode DataStreamClient::initializeTransport(uv_loop_t* clientLoop, uv_handle
 }
 
 ErrorCode DataStreamClient::terminateTransport() {
-    // uv_close((uv_handle_t*)&m_timerHandle, nullptr);
+    // NOTE: timer is closed with all loop handles during call to stopTransportLoop().
     return terminateStreamTransport();
 }
 
@@ -72,48 +72,6 @@ ErrorCode DataStreamClient::writeTransport(ClientBufferData* clientBufferData) {
         return ErrorCode::E_TRANSPORT_ERROR;
     }
     return ErrorCode::E_OK;
-
-#if 0
-    // TODO: we must use uv_async_send here, since uv_write is NOT thread-safe
-    // will this harm performance?
-    // send asynchronous request to the loop so it will shutdown itself
-    uv_async_t* asyncReq = m_dataAllocator->allocateAsyncRequest();
-    if (asyncReq == nullptr) {
-        LOG_ERROR("Failed to allocate asynchronous request, out of memory");
-        return false;
-    }
-    int res = uv_async_init(getClientLoop(), asyncReq, onAsyncWriteStatic);
-    if (res != 0) {
-        LOG_UV_ERROR(uv_async_init, res,
-                             "Cannot send write request, failed to initialize async request");
-        m_dataAllocator->freeAsyncRequest(asyncReq);
-        return false;
-    }
-
-    asyncReq->data = clientBufferData;
-    res = uv_async_send(asyncReq);
-    if (res != 0) {
-        LOG_UV_ERROR(uv_async_send, res,
-                             "Cannot send write request, failed to send async request");
-        m_dataAllocator->freeAsyncRequest(asyncReq);
-        return false;
-    }
-    return true;
-#endif
-#if 0
-    uv_write_t* writeReq = new (std::nothrow) uv_write_t();
-    if (writeReq == nullptr) {
-        LOG_ERROR("Failed to allocate write request, out of memory");
-        return false;
-    }
-    writeReq->data = clientBufferData;
-    int res = uv_write(writeReq, (uv_stream_t*)transport, buffer, 1, onWriteStatic);
-    if (res < 0) {
-        LOG_UV_ERROR(uv_write, res, "Failed to send TCP message");
-        return false;
-    }
-    return true;
-#endif
 }
 
 void DataStreamClient::onConnectStatic(uv_connect_t* req, int status) {

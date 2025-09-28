@@ -23,7 +23,7 @@ namespace commutil {
  * @brief Message sender utility class. Takes care of putting in backlog and resending when
  * transport layer is down.
  */
-class COMMUTIL_API MsgSender : public MsgRequestListener, public DataLoopListener {
+class COMMUTIL_API MsgSender : public DataLoopListener {
 public:
     MsgSender()
         : m_statListener(nullptr),
@@ -95,7 +95,7 @@ public:
      * handler, if installed, is invoked in order to decide whether to save the message for
      * resending.
      */
-    // ErrorCode sendMsg(Msg* msg);
+    ErrorCode sendMsg(Msg* msg);
 
     /**
      * @brief Sends a message through the underlying transport and waits for the matching response.
@@ -154,13 +154,6 @@ public:
     ErrorCode transactMsg(Msg* msg, uint64_t timeoutMillis = COMMUTIL_MSG_CONFIG_TIMEOUT);
 
     /**
-     * @brief Notify incoming response for a pending request.
-     * @param request The pending request.
-     * @param response The incoming response.
-     */
-    void onResponseArrived(Msg* request, Msg* response) override;
-
-    /**
      * @brief Notifies of I/O data loop starting (called before @ref uv_run()).
      * @param loop The loop that is to be executed.
      */
@@ -200,31 +193,6 @@ public:
     void onLoopInterrupt(uv_loop_t* loop, void* userData) override;
 
 private:
-#if 0
-    /**
-     * @brief Prepares a message for sending through the underlying transport.
-     * @param msgId The message id.
-     * @param body The message's body.
-     * @param len The message's length.
-     * @param compress Specifies whether to compress the message (using gzip).
-     * @param flags Optional flags to be added to the message header.
-     * @return The operation result.
-     */
-    Msg* prepareMsg(uint16_t msgId, const char* body, size_t len, bool compress = false,
-                    uint16_t flags = 0);
-
-    /**
-     * @brief Prepares a message for sending through the underlying transport.
-     * @param msgId The message id.
-     * @param msgWriter The message payload writer.
-     * @param compress Specifies whether to compress the message (using gzip).
-     * @param flags Optional flags to be added to the message header.
-     * @return The operation result.
-     */
-    Msg* prepareMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress = false,
-                    uint16_t flags = 0);
-#endif
-
     ErrorCode sendMsgInternal(uint16_t msgId, const char* body, size_t len, bool compress,
                               uint16_t msgFlags, uint32_t requestFlags, MsgRequestData& requestData,
                               Msg** msg);
@@ -236,10 +204,10 @@ private:
     /** @brief Resends a message pending in the backlog. */
     ErrorCode resendMsg(Msg* msg);
 
+    // data client and framing protocol members
     MsgClient* m_msgClient;
     MsgFrameWriter m_frameWriter;
     MsgFrameReader m_frameReader;
-    // TODO: replace this with frame listener?
     MsgResponseHandler* m_responseHandler;
 
     // message client configuration
@@ -253,7 +221,6 @@ private:
 
     // resend members
     MsgBacklog m_backlog;
-
     std::atomic<bool> m_stopResend;
     std::atomic<bool> m_resendDone;
     uint64_t m_stopResendTimeMillis;
@@ -263,11 +230,9 @@ private:
 
     void stopResendTimer();
     void waitBacklogEmpty();
-    // void copyPendingBacklog();
     void processPendingResponses();
     void dropExcessBacklog();
-    ErrorCode resendShippingBacklog(bool duringShutdown = false,
-                                    uint64_t* minRequestTimeoutMillis = nullptr);
+    ErrorCode resendShippingBacklog(uint64_t* minRequestTimeoutMillis = nullptr);
     ErrorCode renewRequestId(Msg* msg);
     ErrorCode resendRequest(Msg* request, uint64_t* minRequestTimeoutMillis);
     ErrorCode handleResponse(Msg* request, Msg* response);

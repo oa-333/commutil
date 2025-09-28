@@ -28,16 +28,12 @@ ErrorCode MsgSender::initialize(MsgClient* msgClient, const MsgConfig& msgConfig
     m_statListener = statListener;
     m_responseHandler = responseHandler;
     m_frameReader.initialize(m_msgClient->getByteOrder(), m_statListener, m_responseHandler);
-    // m_msgClient->getRequestPool().setListener(this);
     m_msgClient->setDataLoopListener(this);
     m_backlog.initialize(&m_msgClient->getRequestPool());
     return ErrorCode::E_OK;
 }
 
-ErrorCode MsgSender::terminate() {
-    // m_msgClient->getRequestPool().setListener(nullptr);
-    return ErrorCode::E_OK;
-}
+ErrorCode MsgSender::terminate() { return ErrorCode::E_OK; }
 
 ErrorCode MsgSender::start() {
     m_resendDone.store(false, std::memory_order_relaxed);
@@ -96,6 +92,28 @@ ErrorCode MsgSender::sendMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress
     return rc;
 }
 
+ErrorCode MsgSender::sendMsg(Msg* msg) {
+    // check state
+    if (m_stopResend.load(std::memory_order_relaxed)) {
+        return ErrorCode::E_INVALID_STATE;
+    }
+
+    MsgRequestData requestData;
+    ErrorCode rc = m_msgClient->sendMsg(msg, 0, requestData);
+
+    // update statistics and return
+    if (m_statListener != nullptr) {
+        bool compress = msg->getHeader().isCompressed();
+        uint32_t compressedPayloadSize = compress ? msg->getPayloadSizeBytes() : 0;
+        uint32_t payloadSize =
+            compress ? msg->getHeader().getUncompressedLength() : msg->getPayloadSizeBytes();
+        m_statListener->onSendMsgStats(payloadSize, compressedPayloadSize, (int)rc);
+    }
+
+    // NOTE: the message is saved in the pending requests of the message client
+    return rc;
+}
+
 ErrorCode MsgSender::transactMsg(uint16_t msgId, const char* body, size_t len,
                                  bool compress /* = false */, uint16_t flags /* = 0 */,
                                  uint64_t timeoutMillis /* = COMMUTIL_MSG_CONFIG_TIMEOUT */) {
@@ -129,20 +147,6 @@ ErrorCode MsgSender::transactMsg(uint16_t msgId, const char* body, size_t len,
         }
     }
     return rc;
-
-#if 0
-    rc = transactMsg(msg, timeoutMillis);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to transact message with %s: %s", m_logTargetName.c_str(),
-                  errorCodeToString(rc));
-        addBacklog(msg);
-        // do not free message, it is now in the backlog queue
-        return rc;
-    }
-
-    freeMsg(msg);
-    return ErrorCode::E_OK;
-#endif
 }
 
 ErrorCode MsgSender::transactMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress /* = false */,
@@ -178,33 +182,11 @@ ErrorCode MsgSender::transactMsg(uint16_t msgId, MsgWriter* msgWriter, bool comp
         }
     }
     return rc;
-
-#if 0
-    rc = transactMsg(msg, timeoutMillis);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to transact message with %s: %s", m_logTargetName.c_str(),
-                  errorCodeToString(rc));
-        addBacklog(msg);
-        // do not free message, it is now in the backlog queue
-        return rc;
-    }
-
-    freeMsg(msg);
-    return ErrorCode::E_OK;
-#endif
 }
 
 ErrorCode MsgSender::transactMsg(Msg* msg, uint64_t timeoutMillis) {
     return m_msgClient->transactMsg(
         msg, timeoutMillis, [this, msg](Msg* response) { return handleResponse(msg, response); });
-}
-
-void MsgSender::onResponseArrived(Msg* request, Msg* response) {
-    // just wake up resend thread
-    (void)request;
-    (void)response;
-    // std::unique_lock<std::mutex> lock(m_lock);
-    // m_cv.notify_one();
 }
 
 void MsgSender::onLoopStart(uv_loop_t* loop) {
@@ -217,16 +199,6 @@ void MsgSender::onLoopStart(uv_loop_t* loop) {
 }
 
 void MsgSender::onLoopEnd(uv_loop_t* loop) {
-    // TODO: fix this, the last timer round should enable waiting for incoming requests
-    // but we cannot wait in a loop...
-    // when stop is called the following should be done:
-    // raise stop flag, so that timer granularity changes (we also should send an async request for
-    // that, so that the loop will change behavior immediately)
-    // then wait until backlog is empty or until timed out
-    // for this we need to disable incoming messages (via atomic state)
-    // the timer should signal that backlog is empty and loop can stop earlier
-    // for now lock/cv can be used
-    // finally the loop can be closed
     (void)loop;
 
     // last chance
@@ -293,7 +265,7 @@ void MsgSender::onLoopTimer(uv_loop_t* loop, uint64_t timerId) {
 
     // now retry to send queued back log messages
     uint64_t minRequestTimeoutMillis = COMMUTIL_MSG_INFINITE_TIMEOUT;
-    ErrorCode rc = resendShippingBacklog(false, &minRequestTimeoutMillis);
+    ErrorCode rc = resendShippingBacklog(&minRequestTimeoutMillis);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to resend shipping backlog: %s", errorCodeToString(rc));
     }
@@ -328,19 +300,8 @@ void MsgSender::onLoopTimer(uv_loop_t* loop, uint64_t timerId) {
             LOG_ERROR("Failed to set next resend timer: %s", errorCodeToString(rc));
         }
         LOG_TRACE("Scheduling next resend timer with %" PRIu64 " millis", nextResendTimeMillis);
-    } else {
-        // otherwise one-shot timer dies
-        /*// stop periodic timer
-        rc = stopLoopTimer(m_resendTimerId);
-        if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to stop resend timer");
-        }
-        rc = stopLoopTimer(m_shutdownTimerId);
-        if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to stop shutdown timer");
-        }
-        m_resendDone.store(true, std::memory_order_relaxed);*/
     }
+    // otherwise one-shot timer dies
 }
 
 void MsgSender::onLoopInterrupt(uv_loop_t* loop, void* userData) {
@@ -350,12 +311,7 @@ void MsgSender::onLoopInterrupt(uv_loop_t* loop, void* userData) {
     // if shutdown grace period was configured then change to shutdown polling period
     // otherwise close the timer now
     if (m_config.m_shutdownTimeoutMillis > 0) {
-        /*ErrorCode rc = setPeriodicLoopTimer(loop, m_config.m_shutdownPollingTimeoutMillis);
-        if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to start shutdown loop timer: %s", errorCodeToString(rc));
-        }*/
-        // stopLoopTimer(m_resendTimerId);
-        // uv_print_all_handles(loop, stderr);
+        // start a new timer for shutdown grace period
         ErrorCode rc =
             startLoopTimer(loop, m_shutdownTimerId, m_config.m_shutdownPollingTimeoutMillis);
         if (rc != ErrorCode::E_OK) {
@@ -371,83 +327,6 @@ void MsgSender::onLoopInterrupt(uv_loop_t* loop, void* userData) {
     }
 }
 
-#if 0
-Msg* MsgSender::prepareMsg(uint16_t msgId, const char* body, size_t len,
-                           bool compress /* = false */, uint16_t flags /* = 0 */) {
-            // compress body if needed
-            std::string compressedBody;
-            if (compress) {
-                gzip::Compressor comp(Z_BEST_COMPRESSION);
-                comp.compress(compressedBody, body, len);
-                body = compressedBody.c_str();
-                len = compressedBody.size();
-                flags |= COMMUTIL_MSG_FLAG_COMPRESSED;
-            }
-
-            // allocate message buffer
-            Msg* msg = allocMsg(msgId, flags, 0, 0, (uint32_t)len);
-            if (msg == nullptr) {
-                LOG_ERROR("Failed to allocate message with payload size %zu, out of memory", len);
-                return nullptr;
-            }
-
-            // copy payload
-            memcpy(msg->modifyPayload(), body, len);
-            return msg;
-        }
-
-        Msg* MsgSender::prepareMsg(uint16_t msgId, MsgWriter* msgWriter,
-                                   bool compress /* = false */, uint16_t flags /* = 0 */) {
-            // if compression is enabled then we have no choice but first to serialize into a
-            // temporary buffer and then write into the payload buffer (because we cannot tell
-            // required buffer size before compression takes place)
-            Msg* msg = nullptr;
-            if (compress) {
-                // serialize message to buffer
-                std::vector<char> buf(msgWriter->getPayloadSizeBytes(), 0);
-                ErrorCode rc = msgWriter->writeMsg(&buf[0]);
-                if (rc != ErrorCode::E_OK) {
-                    LOG_ERROR("Failed to write message into buffer: %s", errorCodeToString(rc));
-                    return nullptr;
-                }
-
-                // compress serialized message
-                std::string compressedBody;
-                gzip::Compressor comp(Z_BEST_COMPRESSION);
-                comp.compress(compressedBody, &buf[0], buf.size());
-
-                // prepare message frame
-                flags |= COMMUTIL_MSG_FLAG_COMPRESSED;
-                msg = allocMsg(msgId, flags, 0, 0, (uint32_t)compressedBody.size());
-                if (msg == nullptr) {
-                    LOG_ERROR(
-                        "Failed to allocate message with compressed payload size %zu, out of "
-                        "memory",
-                        compressedBody.size());
-                    return nullptr;
-                }
-                memcpy(msg->modifyPayload(), compressedBody.data(), compressedBody.size());
-            } else {
-                msg = allocMsg(msgId, flags, 0, 0, msgWriter->getPayloadSizeBytes());
-                if (msg == nullptr) {
-                    LOG_ERROR("Failed to allocate message with payload %u, out of memory",
-                              msgWriter->getPayloadSizeBytes());
-                    return nullptr;
-                }
-
-                // serialize directly into payload
-                ErrorCode rc = msgWriter->writeMsg(msg->modifyPayload());
-                if (rc != ErrorCode::E_OK) {
-                    LOG_ERROR("Failed to write message into buffer: %s", errorCodeToString(rc));
-                    freeMsg(msg);
-                    return nullptr;
-                }
-            }
-
-            return msg;
-        }
-#endif
-
 ErrorCode MsgSender::sendMsgInternal(uint16_t msgId, const char* body, size_t len, bool compress,
                                      uint16_t msgFlags, uint32_t requestFlags,
                                      MsgRequestData& requestData, Msg** msg) {
@@ -461,7 +340,8 @@ ErrorCode MsgSender::sendMsgInternal(uint16_t msgId, const char* body, size_t le
     }
 
     // TODO: if we keep uncompressed size in message header (also good for validation) we
-    // can refactor out the following part into one line: sendMsg(msg)
+    // can refactor out the following part into one line: sendMsg(msg). in fact the only varying
+    // part is prepareMsgFrame, so maybe a lambda expression is appropriate.
 
     // send message
     rc = m_msgClient->sendMsg(*msg, requestFlags, requestData);
@@ -508,10 +388,6 @@ ErrorCode MsgSender::sendMsgInternal(uint16_t msgId, MsgWriter* msgWriter, bool 
     return rc;
 }
 
-// TODO: open send callback option in message client, so that all backlog stuff happens in
-// IO thread which is mostly idle waiting for IO. This way no lock is required, both for
-// backlog and request pool.
-
 ErrorCode MsgSender::recvResponse(MsgRequestData& requestData, Msg* msg, uint64_t timeoutMillis) {
     // wait for response
     Msg* response = nullptr;
@@ -555,121 +431,6 @@ ErrorCode MsgSender::resendMsg(Msg* msg) {
     MsgRequestData requestData;
     return m_msgClient->sendMsg(msg, COMMUTIL_REQUEST_FLAG_REUSE, requestData);
 }
-
-/*void MsgSender::resendThread() {
-    uint64_t nextResendTimeMillis = m_config.m_resendPeriodMillis;
-    while (!shouldStopResend()) {
-        // wait the full period until ordered to stop or that we are urged to resend
-        {
-            std::unique_lock<std::mutex> lock(m_lock);
-            m_cv.wait_for(lock, std::chrono::milliseconds(nextResendTimeMillis), [this] {
-                return m_stopResend || !m_pendingBackLog.empty() ||
-                       m_msgClient->getRequestPool().getReadyRequestCount() > 0;
-            });
-            if (m_stopResend) {
-                break;
-            }
-
-            // get out all pending back log messages and put in shipping back log queue, so
-we can
-            // release the lock quickly for more pending messages, otherwise we would be
-holding the
-            // lock while sending messages from the back log queue
-            copyPendingBacklog();
-        }
-
-        // check for incoming and expired requests and remove from pending backlog.
-        processPendingResponses();
-
-        // see if we exceeded limit
-        dropExcessBacklog();
-
-        // now retry to send queued back log messages
-        uint64_t minRequestTimeoutMillis = COMMUTIL_MSG_INFINITE_TIMEOUT;
-        ErrorCode rc = resendShippingBacklog(false, &minRequestTimeoutMillis);
-        if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to resend shipping backlog: %s", errorCodeToString(rc));
-        }
-
-        if (minRequestTimeoutMillis == COMMUTIL_MSG_INFINITE_TIMEOUT) {
-            nextResendTimeMillis = m_config.m_resendPeriodMillis;
-        } else {
-            nextResendTimeMillis = getCurrentTimeMillis() - minRequestTimeoutMillis;
-        }
-    }
-
-    // one last attempt before shutdown
-    if (m_config.m_shutdownTimeoutMillis > 0) {
-        // copy newly added pending blacklog into shipping blacklog (one last time)
-        copyPendingBacklog();
-
-        // attempt resending failed messages
-        // NOTE: theoretically, high resolution clock CAN go backwards, resulting in
-negative time
-        // diff, so we use instead steady clock here, which is guaranteed to be monotonic
-        uint64_t start = getCurrentTimeMillis();
-        uint64_t timePassedMillis = 0;
-        do {
-            // check for incoming and expired requests and remove from pending backlog
-            processPendingResponses();
-
-            // check if we are done
-            if (m_backlog.isEmpty()) {
-                break;
-            }
-
-            // try to resend backlog
-            ErrorCode rc = resendShippingBacklog(true);
-            if (rc != ErrorCode::E_OK) {
-                LOG_ERROR("Failed to resend shipping backlog: %s", errorCodeToString(rc));
-            }
-
-            // wait for incoming request
-            {
-                std::unique_lock<std::mutex> lock(m_lock);
-                m_cv.wait_for(
-                    lock,
-std::chrono::milliseconds(m_config.m_shutdownPollingTimeoutMillis), [this] { return
-m_msgClient->getRequestPool().getReadyRequestCount() > 0; });
-            }
-
-            // compute time passed
-            uint64_t end = getCurrentTimeMillis();
-            // NOTE: due to usage of steady clock, time diff cannot be negative
-            assert(end >= start);
-            timePassedMillis = end - start;
-        } while (!m_backlog.isEmpty() && timePassedMillis <=
-m_config.m_shutdownTimeoutMillis);
-    }
-
-    // last chance
-    processPendingResponses();
-
-    // report any missing response
-    uint32_t backlogCount = m_backlog.getEntryCount();
-    if (backlogCount > 0) {
-        LOG_ERROR("%s log target has failed to resend %u pending messages",
-m_logTargetName.c_str(), backlogCount);
-    }
-}
-
-void MsgSender::copyPendingBacklog() {
-    while (!m_pendingBackLog.empty()) {
-        Msg* request = m_pendingBackLog.front();
-        MsgRequest* requestData = m_msgClient->getRequestPool().getRequestData(request);
-        if (requestData == nullptr) {
-            LOG_ERROR("Failed to add pending request to backlog, request data not found");
-        } else {
-            ErrorCode rc =
-                m_backlog.addPendingRequest(request, requestData->getRequestTimeMillis());
-            if (rc != ErrorCode::E_OK) {
-                LOG_ERROR("Failed to add pending request to backlog: %s",
-errorCodeToString(rc));
-            }
-        }
-        m_pendingBackLog.pop_front();
-    }
-}*/
 
 void MsgSender::processPendingResponses() {
     // check whether responses have already arrived or that request have already expired
@@ -721,8 +482,7 @@ ErrorCode MsgSender::handleResponse(Msg* request, Msg* response) {
 
 void MsgSender::dropExcessBacklog() { m_backlog.pruneBacklog(m_config.m_backlogLimitBytes); }
 
-ErrorCode MsgSender::resendShippingBacklog(bool duringShutdown /* = false */,
-                                           uint64_t* minRequestTimeoutMillis /* = nullptr */) {
+ErrorCode MsgSender::resendShippingBacklog(uint64_t* minRequestTimeoutMillis /* = nullptr */) {
     LOG_TRACE("Attempting to resend %u pending messages", m_backlog.getEntryCount());
     ErrorCode rc = ErrorCode::E_OK;
     uint64_t currentTimeMillis = getCurrentTimeMillis();
@@ -738,19 +498,6 @@ ErrorCode MsgSender::resendShippingBacklog(bool duringShutdown /* = false */,
             m_backlog.updateReadyResendRequest();
         }
     }
-    /*m_backlog.forEachRequest([this, duringShutdown, minRequestTimeoutMillis, &rc](Msg* request) {
-        if (duringShutdown || !m_stopResend.load(std::memory_order_relaxed)) {
-            ErrorCode rc2 = resendRequest(request, minRequestTimeoutMillis);
-            if (rc2 != ErrorCode::E_OK) {
-                LOG_ERROR("Failed to resend request: %s", errorCodeToString(rc));
-                if (rc == ErrorCode::E_OK) {
-                    rc = rc2;
-                }
-            }
-            return true;  // keep traversing pending requests
-        }
-        return false;  // stop traversing pending requests
-    });*/
     return rc;
 }
 
@@ -810,7 +557,7 @@ ErrorCode MsgSender::resendRequest(Msg* request, uint64_t* minRequestTimeoutMill
         }
         // regardless of what happened, we update the resend time
         requestData->updateResendTime();
-        // TODO: update min heap in backlog
+        // NOTE: caller is responsible for updating min heap in backlog
     }
 
     // update global resend minimum (even if no resend took place)
@@ -824,11 +571,6 @@ ErrorCode MsgSender::resendRequest(Msg* request, uint64_t* minRequestTimeoutMill
     return rc;
 }
 
-/*bool MsgSender::shouldStopResend() {
-    std::unique_lock<std::mutex> lock(m_lock);
-    return m_stopResend;
-}*/
-
 void MsgSender::stopResendTimer() {
     m_resendDone.store(false, std::memory_order_relaxed);
     m_stopResend.store(true, std::memory_order_relaxed);
@@ -836,12 +578,15 @@ void MsgSender::stopResendTimer() {
 }
 
 void MsgSender::waitBacklogEmpty() {
-    // TODO: make sure there is no division by zero
-    uint64_t waitCount = m_config.m_shutdownTimeoutMillis / m_config.m_shutdownPollingTimeoutMillis;
+    // make sure there is no division by zero
+    uint64_t pollTimeout = m_config.m_shutdownPollingTimeoutMillis;
+    if (pollTimeout == 0) {
+        pollTimeout = COMMUTIL_MSG_DEFAULT_SHUTDOWN_POLLING_TIMEOUT_MILLIS;
+    }
+    uint64_t waitCount = m_config.m_shutdownTimeoutMillis / pollTimeout;
     uint64_t iterCount = 0;
     while (!m_resendDone.load(std::memory_order_relaxed) && iterCount++ < waitCount) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(m_config.m_shutdownPollingTimeoutMillis));
+        std::this_thread::sleep_for(std::chrono::milliseconds(pollTimeout));
     }
 }
 

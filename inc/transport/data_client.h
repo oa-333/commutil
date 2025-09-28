@@ -114,10 +114,10 @@ public:
 protected:
     DataClient(ByteOrder byteOrder)
         : m_dataListener(nullptr),
-          m_dataLoopListener(nullptr),
           m_dataAllocator(nullptr),
           m_byteOrder(byteOrder),
           m_transport(nullptr),
+          m_dataLoopListener(nullptr),
           m_isReady(false),
           m_connectStatus(0) {}
     DataClient(const DataClient&) = delete;
@@ -182,9 +182,8 @@ protected:
 
     inline uv_loop_t* getClientLoop() { return &m_clientLoop; }
 
-    // the data listener
+    // members exposed to derived classes
     DataListener* m_dataListener;
-    DataLoopListener* m_dataLoopListener;
     DataClientAllocator* m_dataAllocator;
     ConnectionDetails m_connectionDetails;
 
@@ -195,6 +194,7 @@ private:
     uv_loop_t m_clientLoop;
     uv_handle_t* m_transport;
     std::thread m_ioThread;
+    DataLoopListener* m_dataLoopListener;
 
     std::mutex m_lock;
     std::condition_variable m_cv;

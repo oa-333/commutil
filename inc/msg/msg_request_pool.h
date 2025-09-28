@@ -9,9 +9,7 @@
 
 namespace commutil {
 
-// TODO: add a listener here so we can get notified of arriving responses and wake up the resend
-// thread
-
+/** @brief A listener for receiving notifications of arriving responses. */
 class COMMUTIL_API MsgRequestListener {
 public:
     virtual ~MsgRequestListener() {}

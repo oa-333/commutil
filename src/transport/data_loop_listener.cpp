@@ -169,7 +169,6 @@ void DataLoopListener::onInterruptStatic(uv_async_t* handle) {
     listenerPair->first->onLoopInterrupt(handle->loop, listenerPair->second);
     delete listenerPair;
     uv_close((uv_handle_t*)handle, [](uv_handle_t* handle) -> void { delete (uv_async_t*)handle; });
-    // delete handle;
 }
 
 }  // namespace commutil

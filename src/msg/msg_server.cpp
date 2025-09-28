@@ -164,49 +164,6 @@ MsgAction MsgServer::onMsg(const ConnectionDetails& connectionDetails, Msg* msg,
         }
     }
 
-#if 0
-    // decompress if needed
-    const char* buffer = msg->getPayload();
-    uint32_t bufferSize = msg->getPayloadSizeBytes();
-    std::string decompressedPayload;
-    if (msg->getHeader().isCompressed()) {
-        // first uncompress message data buffer
-        gzip::Decompressor decompressor;
-        decompressor.decompress(decompressedPayload, buffer, bufferSize);
-        buffer = decompressedPayload.data();
-        bufferSize = (uint32_t)decompressedPayload.size();
-    }
-
-    // take care of batch if needed
-    // otherwise
-    if (msg->getHeader().isBatch()) {
-        MsgBatchReader batchReader(buffer, bufferSize, m_dataServer->getByteOrder());
-        uint32_t batchSize = 0;
-        ErrorCode rc = batchReader.readBatchSize(batchSize);
-        if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to deserialize record batch size: %s\n", errorCodeToString(rc));
-            handleMsgError(connectionDetails, msg->getHeader(), (int)rc);
-        } else {
-            for (uint32_t i = 0; i < batchSize; ++i) {
-                const char* msgBuffer = nullptr;
-                uint32_t length = 0;
-                rc = batchReader.readMsg(&msgBuffer, length);
-                if (rc != ErrorCode::E_OK) {
-                    LOG_ERROR("Failed to deserialize record in batch: %s\n", errorCodeToString(rc));
-                    handleMsgError(connectionDetails, msg->getHeader(), (int)rc);
-                    break;
-                }
-                if (!handleMsg(connectionDetails, msg->getHeader(), msgBuffer, length,
-                               i + 1 == batchSize, batchSize)) {
-                    break;
-                }
-            }
-        }
-    } else {
-        handleMsg(connectionDetails, msg->getHeader(), buffer, bufferSize, true, 1);
-    }
-#endif
-
     // tell caller the message can be deleted
     return MsgAction::MSG_CAN_DELETE;
 }

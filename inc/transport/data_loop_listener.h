@@ -12,9 +12,9 @@
 namespace commutil {
 
 /**
- * @brief A listener that receives notificaitons during the life-cycle of a libuv loop and allows
+ * @brief A listener that receives notifications during the life-cycle of a libuv loop and allows
  * participating and affecting the loop life-cycle. The same listener can be used with mode than one
- * loop, although for the sake of simplicitly this is not advised.
+ * loop, although for the sake of simplicity this is not advised.
  */
 class COMMUTIL_API DataLoopListener {
 public:

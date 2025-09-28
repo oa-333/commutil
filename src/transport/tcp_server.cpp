@@ -126,18 +126,18 @@ ErrorCode TcpServer::initTcpServer() {
 
 ErrorCode TcpServer::termTcpServer() {
     ErrorCode rc = ErrorCode::E_OK;
-    int res = 0;
+    // int res = 0;
     switch (m_serverState) {
         case ServerState::SS_INIT:
             uv_close((uv_handle_t*)&m_server, nullptr);
             COMMUTIL_FALLTHROUGH;
 
         case ServerState::SS_LOOP_INIT:
-            res = uv_loop_close(&m_serverLoop);
+            /*res = uv_loop_close(&m_serverLoop);
             if (res < 0) {
                 LOG_UV_ERROR(uv_loop_close, res, "Failed to close TCP server loop");
                 rc = ErrorCode::E_TRANSPORT_ERROR;
-            }
+            }*/
             break;
 
         // TODO: check this case carefully, is there any required termination?
@@ -164,9 +164,21 @@ ErrorCode TcpServer::initPipeServer() {
     }
     m_pipeServer.data = this;
 
+#ifndef COMMUTIL_WINDOWS
+    if (unlink(COMMUTIL_PIPE_NAME) < 0) {
+        int sysErr = errno;
+        if (sysErr != ENOENT) {
+            LOG_SYS_ERROR(unlink, "Failed to unlink previous pipe instance at: %s",
+                          COMMUTIL_PIPE_NAME);
+            return ErrorCode::E_SYSTEM_FAILURE;
+        }
+    }
+#endif
+
     res = uv_pipe_bind(&m_pipeServer, COMMUTIL_PIPE_NAME);
     if (res < 0) {
-        LOG_UV_ERROR(uv_pipe_bind, res, "Failed to bind pipe server object");
+        LOG_UV_ERROR(uv_pipe_bind, res, "Failed to bind pipe server object to path: %s",
+                     COMMUTIL_PIPE_NAME);
         uv_close((uv_handle_t*)&m_pipeServer, nullptr);
         return ErrorCode::E_TRANSPORT_ERROR;
     }

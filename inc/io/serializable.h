@@ -1,6 +1,8 @@
 #ifndef __SERIALIZABLE_H__
 #define __SERIALIZABLE_H__
 
+#include <cassert>
+
 #include "input_stream.h"
 #include "output_stream.h"
 
@@ -49,41 +51,57 @@ protected:
     Serializable& operator=(const Serializable&) = delete;
 };
 
-/** @brief Serializes 1-byte integer. */
+/** @brief Serializes 1-byte signed integer. */
 #define COMM_SERIALIZE_INT8(os, value)            \
     {                                             \
+        assert(sizeof(value) == 1);               \
         commutil::ErrorCode rc = os.write(value); \
         if (rc != commutil::ErrorCode::E_OK) {    \
             return rc;                            \
         }                                         \
     }
 
-/** @brief Serializes 2-byte integer. */
-#define COMM_SERIALIZE_INT16(os, value)                                                \
-    {                                                                                  \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htons(value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                         \
-            return rc;                                                                 \
-        }                                                                              \
+/** @brief Serializes 1-byte unsigned integer. */
+#define COMM_SERIALIZE_UINT8(os, value) COMM_SERIALIZE_INT8(os, value)
+
+/** @brief Serializes 2-byte signed integer. */
+#define COMM_SERIALIZE_INT16(os, value)                                                          \
+    {                                                                                            \
+        assert(sizeof(value) == 2);                                                              \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htons((uint16_t)value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                                   \
+            return rc;                                                                           \
+        }                                                                                        \
     }
+
+/** @brief Serializes 2-byte unsigned integer. */
+#define COMM_SERIALIZE_UINT16(os, value) COMM_SERIALIZE_INT16(os, value)
 
 /** @brief Serializes 4-byte integer. */
-#define COMM_SERIALIZE_INT32(os, value)                                                \
-    {                                                                                  \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonl(value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                         \
-            return rc;                                                                 \
-        }                                                                              \
+#define COMM_SERIALIZE_INT32(os, value)                                                          \
+    {                                                                                            \
+        assert(sizeof(value) == 4);                                                              \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonl((uint32_t)value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                                   \
+            return rc;                                                                           \
+        }                                                                                        \
     }
 
+/** @brief Serializes 4-byte unsigned integer. */
+#define COMM_SERIALIZE_UINT32(os, value) COMM_SERIALIZE_INT32(os, value)
+
 /** @brief Serializes 8-byte integer. */
-#define COMM_SERIALIZE_INT64(os, value)                                                 \
-    {                                                                                   \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonll(value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                          \
-            return rc;                                                                  \
-        }                                                                               \
+#define COMM_SERIALIZE_INT64(os, value)                                                           \
+    {                                                                                             \
+        assert(sizeof(value) == 8);                                                               \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonll((uint64_t)value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                                    \
+            return rc;                                                                            \
+        }                                                                                         \
     }
+
+/** @brief Serializes 8-byte unsigned integer. */
+#define COMM_SERIALIZE_UINT64(os, value) COMM_SERIALIZE_INT64(os, value)
 
 /** @brief Serializes boolean value. */
 #define COMM_SERIALIZE_BOOL(os, value)             \
@@ -169,6 +187,7 @@ protected:
 /** @brief Deserializes 1-byte integer value. */
 #define COMM_DESERIALIZE_INT8(is, value)         \
     {                                            \
+        assert(sizeof(value) == 1);              \
         commutil::ErrorCode rc = is.read(value); \
         if (rc != commutil::ErrorCode::E_OK) {   \
             return rc;                           \
@@ -176,8 +195,22 @@ protected:
     }
 
 /** @brief Deserializes 2-byte integer value. */
-#define COMM_DESERIALIZE_INT16(is, value)        \
+#define COMM_DESERIALIZE_INT16(is, value)            \
+    {                                                \
+        assert(sizeof(value) == 2);                  \
+        commutil::ErrorCode rc = is.read(value);     \
+        if (rc != commutil::ErrorCode::E_OK) {       \
+            return rc;                               \
+        }                                            \
+        if (is.isNetworkOrder()) {                   \
+            value = (int16_t)ntohs((uint16_t)value); \
+        }                                            \
+    }
+
+/** @brief Deserializes 2-byte integer value. */
+#define COMM_DESERIALIZE_UINT16(is, value)       \
     {                                            \
+        assert(sizeof(value) == 2);              \
         commutil::ErrorCode rc = is.read(value); \
         if (rc != commutil::ErrorCode::E_OK) {   \
             return rc;                           \
@@ -188,8 +221,22 @@ protected:
     }
 
 /** @brief Deserializes 4-byte integer value. */
-#define COMM_DESERIALIZE_INT32(is, value)        \
+#define COMM_DESERIALIZE_INT32(is, value)            \
+    {                                                \
+        assert(sizeof(value) == 4);                  \
+        commutil::ErrorCode rc = is.read(value);     \
+        if (rc != commutil::ErrorCode::E_OK) {       \
+            return rc;                               \
+        }                                            \
+        if (is.isNetworkOrder()) {                   \
+            value = (int32_t)ntohl((uint32_t)value); \
+        }                                            \
+    }
+
+/** @brief Deserializes 4-byte integer value. */
+#define COMM_DESERIALIZE_UINT32(is, value)       \
     {                                            \
+        assert(sizeof(value) == 4);              \
         commutil::ErrorCode rc = is.read(value); \
         if (rc != commutil::ErrorCode::E_OK) {   \
             return rc;                           \
@@ -200,8 +247,22 @@ protected:
     }
 
 /** @brief Deserializes 8-byte integer value. */
-#define COMM_DESERIALIZE_INT64(is, value)        \
+#define COMM_DESERIALIZE_INT64(is, value)             \
+    {                                                 \
+        assert(sizeof(value) == 8);                   \
+        commutil::ErrorCode rc = is.read(value);      \
+        if (rc != commutil::ErrorCode::E_OK) {        \
+            return rc;                                \
+        }                                             \
+        if (is.isNetworkOrder()) {                    \
+            value = (int64_t)ntohll((uint64_t)value); \
+        }                                             \
+    }
+
+/** @brief Deserializes 8-byte integer value. */
+#define COMM_DESERIALIZE_UINT64(is, value)       \
     {                                            \
+        assert(sizeof(value) == 8);              \
         commutil::ErrorCode rc = is.read(value); \
         if (rc != commutil::ErrorCode::E_OK) {   \
             return rc;                           \

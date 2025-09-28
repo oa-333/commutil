@@ -46,6 +46,11 @@ public:
     /** @brief Stops the message client. */
     ErrorCode stop();
 
+    /** @brief Installs a data loop listener. */
+    inline void setDataLoopListener(DataLoopListener* listener) {
+        m_dataClient->setDataLoopListener(listener);
+    }
+
     /**
      * @brief Sends a message through a client connection.
      * @param msg The message to send.

@@ -1,7 +1,8 @@
 {
     "cSpell.words": [
         "COMMUTIL",
-        "libuv"
+        "libuv",
+        "MSVC"
     ],
     "files.associations": {
         "new": "cpp",
@@ -74,6 +75,7 @@
         "text_encoding": "cpp",
         "thread": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "fstream": "cpp"
     }
 }

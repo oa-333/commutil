@@ -38,27 +38,27 @@ MsgHeader::MsgHeader(uint32_t length, uint16_t msgId, uint16_t flags, uint64_t r
 
 ErrorCode MsgHeader::serialize(OutputStream& os) const {
     COMM_SERIALIZE_DATA(os, m_magic);
-    COMM_SERIALIZE_INT32(os, m_length);
-    COMM_SERIALIZE_INT16(os, m_msgId);
-    COMM_SERIALIZE_INT16(os, m_flags);
-    COMM_SERIALIZE_INT64(os, m_requestId);
-    COMM_SERIALIZE_INT32(os, m_requestIndex);
-    COMM_SERIALIZE_INT32(os, m_uncompressedLength);
-    COMM_SERIALIZE_INT32(os, m_batchSize);
-    COMM_SERIALIZE_INT32(os, m_reserved);
+    COMM_SERIALIZE_UINT32(os, m_length);
+    COMM_SERIALIZE_UINT16(os, m_msgId);
+    COMM_SERIALIZE_UINT16(os, m_flags);
+    COMM_SERIALIZE_UINT64(os, m_requestId);
+    COMM_SERIALIZE_UINT32(os, m_requestIndex);
+    COMM_SERIALIZE_UINT32(os, m_uncompressedLength);
+    COMM_SERIALIZE_UINT32(os, m_batchSize);
+    COMM_SERIALIZE_UINT32(os, m_reserved);
     return ErrorCode::E_OK;
 }
 
 ErrorCode MsgHeader::deserialize(InputStream& is) {
     COMM_DESERIALIZE_DATA(is, m_magic);
-    COMM_DESERIALIZE_INT32(is, m_length);
-    COMM_DESERIALIZE_INT16(is, m_msgId);
-    COMM_DESERIALIZE_INT16(is, m_flags);
-    COMM_DESERIALIZE_INT64(is, m_requestId);
-    COMM_DESERIALIZE_INT32(is, m_requestIndex);
-    COMM_DESERIALIZE_INT32(is, m_uncompressedLength);
-    COMM_DESERIALIZE_INT32(is, m_batchSize);
-    COMM_DESERIALIZE_INT32(is, m_reserved);
+    COMM_DESERIALIZE_UINT32(is, m_length);
+    COMM_DESERIALIZE_UINT16(is, m_msgId);
+    COMM_DESERIALIZE_UINT16(is, m_flags);
+    COMM_DESERIALIZE_UINT64(is, m_requestId);
+    COMM_DESERIALIZE_UINT32(is, m_requestIndex);
+    COMM_DESERIALIZE_UINT32(is, m_uncompressedLength);
+    COMM_DESERIALIZE_UINT32(is, m_batchSize);
+    COMM_DESERIALIZE_UINT32(is, m_reserved);
     return ErrorCode::E_OK;
 }
 

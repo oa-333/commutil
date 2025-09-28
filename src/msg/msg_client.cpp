@@ -65,30 +65,40 @@ ErrorCode MsgClient::stop() {
 }
 
 ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags, MsgRequestData& requestData) {
-    // allocate unique request id
-    uint64_t requestId = m_requestPool.fetchAddRequestId();
+    // allocate unique request id if needed
+    bool reuseRequest = (requestFlags & COMMUTIL_REQUEST_FLAG_REUSE);
+    uint64_t requestId =
+        reuseRequest ? msg->getHeader().getRequestId() : m_requestPool.fetchAddRequestId();
 
     // grab a slot in the request array at the client data
-    MsgRequest* request = m_requestPool.getVacantRequest(requestId, requestData.m_requestIndex);
+    MsgRequest* request =
+        reuseRequest ? m_requestPool.getRequestData(msg)
+                     : m_requestPool.getVacantRequest(requestId, requestData.m_requestIndex);
     if (request == nullptr) {
-        LOG_ERROR("Cannot send request: ran out of vacant slot in client");
+        LOG_ERROR(reuseRequest ? "Cannot send request: ran out of vacant slots in client"
+                               : "Cannot send request: reused reqeust slot mismatch");
         return ErrorCode::E_RESOURCE_LIMIT;
     }
-    requestData.m_requestId = requestId;
     request->setFlags(requestFlags);
+    if (!reuseRequest) {
+        requestData.m_requestId = requestId;
+        request->setRequest(msg);
 
-    // update message header
-    msg->modifyHeader().setRequestIndex(requestData.m_requestIndex);
-    msg->modifyHeader().setRequestId(requestData.m_requestId);
+        // update message header
+        msg->modifyHeader().setRequestIndex(requestData.m_requestIndex);
+        msg->modifyHeader().setRequestId(requestData.m_requestId);
+    }
 
     // serialize message into buffer
     // NOTE: we must use a dynamic buffer, since the transport layer uses it asynchronously in
     // another thread
+    // TODO: we can use a static buffer up to some size in the request struct, and a flag denoting
+    // whether a static or dynamic buffer si being used
     uint32_t msgLength = msg->getHeader().getLength();
     char* buffer = new (std::nothrow) char[msgLength];
     if (buffer == nullptr) {
         LOG_ERROR("Failed to allocate %u bytes for message buffer", msgLength);
-        request->release();
+        request->clearRequest();
         return ErrorCode::E_NOMEM;
     }
 
@@ -97,20 +107,22 @@ ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags, MsgRequestData& re
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to serialize message: %s", errorCodeToString(rc));
         delete[] buffer;
-        request->release();
+        request->clearRequest();
         return rc;
     }
 
     // send serialized message through the transport layer
     // NOTE: actual sending is done in another thread, so the buffer must be copied
-    rc = m_dataClient->write(os.getBuffer(), os.getLength(), false);
+    // also note that the message object is passed as user data, so that message sender can get back
+    // the message being sent in the data loop listener interface. this is really awkward and future
+    // versions may as well fix this
+    rc = m_dataClient->write(os.getBuffer(), os.getLength(), false, reuseRequest ? nullptr : msg);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send message, transport layer error: %s", errorCodeToString(rc));
         delete[] buffer;
-        request->release();
+        request->clearRequest();
         return rc;
     }
-    request->setRequest(msg);
     return ErrorCode::E_OK;
 }
 

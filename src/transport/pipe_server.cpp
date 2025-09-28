@@ -36,7 +36,7 @@ ErrorCode PipeServer::onStopTransport() {
         if (m_connDataArray[i]->m_isUsed) {
             ConnectionData* connData = m_connDataArray[i];
             int res = uv_shutdown(&connData->m_shutdownReq,
-                                  (uv_stream_t*)&connData->m_connectionHandle, nullptr);
+                                  (uv_stream_t*)connData->m_connectionHandle, nullptr);
             if (res != 0) {
                 LOG_UV_ERROR(uv_shutdown, res, "Failed to request shutdown of connection %u", i);
                 return ErrorCode::E_TRANSPORT_ERROR;

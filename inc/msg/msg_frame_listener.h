@@ -25,6 +25,9 @@ public:
      * return @ref E_OK, otherwise deriving sub-classes should return error code (e.g. irrecoverable
      * deserialization error), in which case @ref handleMsgError() is NOT called, and if some error
      * status needs to be sent to the client, then deriving sub-classes are responsible for that.
+     * Special meaning is given to return code ErrorCode::E_ALREADY_EXISTS which denotes that the
+     * server detected a duplicate message (e.g. due to resend attempt by client). In this case
+     * batch processing stops as in other errors.
      */
     virtual ErrorCode handleMsg(const ConnectionDetails& connectionDetails,
                                 const MsgHeader& msgHeader, const char* msgBuffer,

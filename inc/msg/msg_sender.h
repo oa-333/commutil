@@ -23,13 +23,19 @@ namespace commutil {
  * @brief Message sender utility class. Takes care of putting in backlog and resending when
  * transport layer is down.
  */
-class COMMUTIL_API MsgSender : public MsgRequestListener {
+class COMMUTIL_API MsgSender : public MsgRequestListener, public DataLoopListener {
 public:
-    MsgSender() : m_statListener(nullptr), m_stopResend(false) {}
+    MsgSender()
+        : m_statListener(nullptr),
+          m_stopResend(false),
+          m_resendDone(false),
+          m_stopResendTimeMillis(0),
+          m_resendTimerId(0),
+          m_shutdownTimerId(0) {}
     MsgSender(const MsgSender&) = delete;
     MsgSender(MsgSender&&) = delete;
     MsgSender& operator=(const MsgSender&) = delete;
-    virtual ~MsgSender() {}
+    ~MsgSender() override {}
 
     /**
      * @brief Initializes the message sender.
@@ -154,6 +160,45 @@ public:
      */
     void onResponseArrived(Msg* request, Msg* response) override;
 
+    /**
+     * @brief Notifies of I/O data loop starting (called before @ref uv_run()).
+     * @param loop The loop that is to be executed.
+     */
+    void onLoopStart(uv_loop_t* loop) override;
+
+    /**
+     * @brief Notifies of I/O data loop ending (called after @ref uv_run()).
+     * @param loop The loop that finished executing.
+     */
+    void onLoopEnd(uv_loop_t* loop) override;
+
+    /**
+     * @brief Notifies of data just being sent.
+     * @param loop The loop that was used to send data.
+     * @param userData User data passed when calling @ref DataClient::Write().
+     */
+    void onLoopSend(uv_loop_t* loop, void* userData) override;
+
+    /**
+     * @brief Notifies of data just being received.
+     * @param loop The loop that was used to receive data.
+     */
+    void onLoopRecv(uv_loop_t* loop) override;
+
+    /**
+     * @brief Notifies of timeout expiring after calling @ref setUpTimer().
+     * @param loop The loop associated with the timer.
+     * @param timerId The timer id.
+     */
+    void onLoopTimer(uv_loop_t* loop, uint64_t timerId) override;
+
+    /**
+     * @brief Notifies of loop interrupt triggered by calling @ref interruptLoop().
+     * @param loop The interrupted loop.
+     * @param userData The associated user data passed to @ref interruptLoop().
+     */
+    void onLoopInterrupt(uv_loop_t* loop, void* userData) override;
+
 private:
 #if 0
     /**
@@ -188,9 +233,6 @@ private:
                               Msg** msg);
     ErrorCode recvResponse(MsgRequestData& requestData, Msg* msg, uint64_t timeoutMillis);
 
-    /** @brief Adds a message to the backlog for resending. */
-    void addBacklog(Msg* msg);
-
     /** @brief Resends a message pending in the backlog. */
     ErrorCode resendMsg(Msg* msg);
 
@@ -212,19 +254,16 @@ private:
     // resend members
     MsgBacklog m_backlog;
 
-    std::list<Msg*> m_pendingBackLog;
-    // std::list<Msg*> m_shippingBackLog;
-    // uint64_t m_backlogSizeBytes;
-    std::mutex m_lock;
-    std::condition_variable m_cv;
+    std::atomic<bool> m_stopResend;
+    std::atomic<bool> m_resendDone;
+    uint64_t m_stopResendTimeMillis;
+    uv_loop_t* m_dataLoop;
+    uint64_t m_resendTimerId;
+    uint64_t m_shutdownTimerId;
 
-    std::thread m_resendThread;
-    bool m_stopResend;
-
-    void resendThread();
-    bool shouldStopResend();
-    void stopResendThread();
-    void copyPendingBacklog();
+    void stopResendTimer();
+    void waitBacklogEmpty();
+    // void copyPendingBacklog();
     void processPendingResponses();
     void dropExcessBacklog();
     ErrorCode resendShippingBacklog(bool duringShutdown = false,

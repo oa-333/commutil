@@ -155,7 +155,13 @@ MsgAction MsgServer::onMsg(const ConnectionDetails& connectionDetails, Msg* msg,
 
     ErrorCode rc = m_frameReader.readMsgFrame(connectionDetails, msg);
     if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to read message frame: %s", errorCodeToString(rc));
+        // allow server to denote message is duplicate without issuing error
+        if (rc != ErrorCode::E_ALREADY_EXISTS) {
+            LOG_ERROR("Failed to read message frame: %s", errorCodeToString(rc));
+        } else {
+            LOG_TRACE("Upper layer indicates duplicate message %" PRIu64,
+                      msg->getHeader().getRequestId());
+        }
     }
 
 #if 0

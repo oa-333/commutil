@@ -29,6 +29,12 @@ typedef uint64_t commutil_request_id_t;
  */
 #define COMMUTIL_REQUEST_FLAG_TX 0x00000001
 
+/**
+ * @def Flag denoting the request object for the message is being reused, and there is no need to
+ * search for a vacant request slot.
+ */
+#define COMMUTIL_REQUEST_FLAG_REUSE 0x00000002
+
 /** @enum Request status constants. */
 enum class MsgRequestStatus : uint32_t { RS_IDLE, RS_PENDING, RS_ARRIVED, RS_ABORTED };
 
@@ -61,7 +67,7 @@ public:
           m_flags(0),
           m_request(nullptr),
           m_response(nullptr),
-          m_sendTimeMillis(0),
+          m_requestTimeMillis(0),
           m_resendTimeMillis(0) {}
 
     /** @brief Copy constructor. */
@@ -71,7 +77,7 @@ public:
           m_flags(request.m_flags),
           m_request(request.m_request),
           m_response(request.m_response),
-          m_sendTimeMillis(request.m_sendTimeMillis),
+          m_requestTimeMillis(request.m_requestTimeMillis),
           m_resendTimeMillis(request.m_resendTimeMillis) {}
 
     MsgRequest(MsgRequest&&) = delete;
@@ -164,7 +170,7 @@ private:
     Msg* m_response;
 
     /** @brief The request send time in milliseconds (for expiry). */
-    uint64_t m_sendTimeMillis;
+    uint64_t m_requestTimeMillis;
 
     /** @brief The request send time in milliseconds (for resend). */
     uint64_t m_resendTimeMillis;

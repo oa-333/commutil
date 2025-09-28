@@ -43,9 +43,8 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
 
     // take care of single message
     if (!msg->getHeader().isBatch()) {
-        m_frameListener->handleMsg(connectionDetails, msg->getHeader(), buffer, bufferSize, true,
-                                   1);
-        return ErrorCode::E_OK;
+        return m_frameListener->handleMsg(connectionDetails, msg->getHeader(), buffer, bufferSize,
+                                          true, 1);
     }
 
     // take care of batch
@@ -77,7 +76,12 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
         rc = m_frameListener->handleMsg(connectionDetails, msg->getHeader(), msgBuffer, length,
                                         i + 1 == batchSize, batchSize);
         if (rc != ErrorCode::E_OK) {
-            LOG_ERROR("Failed to handle record in batch: %s\n", errorCodeToString(rc));
+            if (rc != ErrorCode::E_ALREADY_EXISTS) {
+                LOG_ERROR("Failed to handle record in batch: %s\n", errorCodeToString(rc));
+            } else {
+                LOG_TRACE("Upper layer indicates duplicate message %" PRIu64,
+                          msg->getHeader().getRequestId());
+            }
             break;
         }
     }

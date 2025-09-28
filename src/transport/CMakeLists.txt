@@ -2,6 +2,7 @@ target_sources(commutil PRIVATE
     connection_details.cpp
     data_allocator.cpp
     data_client.cpp
+    data_loop_listener.cpp
     data_server.cpp
     data_stream_client.cpp
     data_stream_server.cpp

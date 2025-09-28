@@ -25,7 +25,8 @@ bool MsgRequest::tryGrab(uint64_t requestId) {
 void MsgRequest::setRequest(Msg* request) {
     std::unique_lock<std::mutex> lock(m_lock);
     m_request = request;
-    m_sendTimeMillis = getCurrentTimeMillis();
+    m_requestTimeMillis = getCurrentTimeMillis();
+    m_resendTimeMillis = m_requestTimeMillis;
 }
 
 Msg* MsgRequest::getRequest() {
@@ -45,14 +46,14 @@ void MsgRequest::setFlags(uint32_t flags) {
 
 uint64_t MsgRequest::getRequestTimeMillis() {
     std::unique_lock<std::mutex> lock(m_lock);
-    return m_sendTimeMillis;
+    return m_requestTimeMillis;
 }
 
 Msg* MsgRequest::clearRequest() {
     std::unique_lock<std::mutex> lock(m_lock);
     Msg* request = m_request;
     m_request = nullptr;
-    m_sendTimeMillis = 0;
+    m_requestTimeMillis = 0;
     return request;
 }
 
@@ -83,7 +84,11 @@ ErrorCode MsgRequest::waitResponse(Msg** response,
                 return m_requestStatus == MsgRequestStatus::RS_ARRIVED ||
                        m_requestStatus == MsgRequestStatus::RS_ABORTED;
             })) {
-            LOG_WARN("Timed out waiting for response to request %" PRIu64, m_requestId);
+            if (timeoutMillis > 0) {
+                LOG_TRACE("Timed out waiting for response to request %" PRIu64 " after %" PRIu64
+                          " milliseconds",
+                          m_requestId);
+            }
         }
     }
 
@@ -132,7 +137,7 @@ void MsgRequest::abortResponse() {
 void MsgRequest::clearResponse() {
     std::unique_lock<std::mutex> lock(m_lock);
     m_request = nullptr;
-    m_sendTimeMillis = 0;
+    m_requestTimeMillis = 0;
     m_response = nullptr;
     m_requestStatus = MsgRequestStatus::RS_IDLE;
 }

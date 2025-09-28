@@ -105,7 +105,8 @@ int DataClient::waitReady() {
     return m_connectStatus;
 }
 
-ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall) {
+ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall,
+                            void* userData /* = nullptr */) {
     // TODO: the caller should have the chance to install an allocator for buffers
     // next we also need a way to avoid all these allocations, for instance, the message layer has
     // request data for each outgoing request, so we can put there a static buffer up to some size,
@@ -141,6 +142,7 @@ ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall) 
         }
         return ErrorCode::E_NOMEM;
     }
+    clientBufferData->m_userData = userData;
 
     // TODO: async request is required for all clients - so pull this up from udp client
     ErrorCode rc = sendWriteRequest(clientBufferData);
@@ -223,6 +225,11 @@ void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram, boo
     if (releaseBuf && buf->base != nullptr) {
         m_dataAllocator->freeRequestBuffer(buf->base);
     }
+
+    // notify loop listener
+    if (m_dataLoopListener != nullptr) {
+        m_dataLoopListener->onLoopRecv(&m_clientLoop);
+    }
 }
 
 void DataClient::onWrite(ClientBufferData* clientBufferData, int status) {
@@ -267,7 +274,13 @@ void DataClient::ioTask() {
                   errorCodeToString(rc));
         return;
     }
+    if (m_dataLoopListener != nullptr) {
+        m_dataLoopListener->onLoopStart(&m_clientLoop);
+    }
     uv_run(&m_clientLoop, UV_RUN_DEFAULT);
+    if (m_dataLoopListener != nullptr) {
+        m_dataLoopListener->onLoopEnd(&m_clientLoop);
+    }
 }
 
 ErrorCode DataClient::sendWriteRequest(ClientBufferData* clientBufferData) {
@@ -305,6 +318,11 @@ void DataClient::onAsyncWriteStatic(uv_async_t* asyncReq) {
     // NOTE: we cannot free the request now, since the loop still holds a reference to it, instead
     // we need to close it, and let the close callback free it.
     uv_close((uv_handle_t*)asyncReq, onCloseAsyncWriteReqStatic);
+
+    if (dataClient->m_dataLoopListener != nullptr) {
+        dataClient->m_dataLoopListener->onLoopSend(&dataClient->m_clientLoop,
+                                                   clientBufferData->m_userData);
+    }
 }
 
 void DataClient::onCloseAsyncWriteReqStatic(uv_handle_t* handle) {

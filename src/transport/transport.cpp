@@ -3,6 +3,7 @@
 #include "commutil_log_imp.h"
 #include "transport/connection_details.h"
 #include "transport/data_client.h"
+#include "transport/data_loop_listener.h"
 #include "transport/data_server.h"
 #include "transport/data_stream_client.h"
 #include "transport/data_stream_server.h"
@@ -121,6 +122,7 @@ void registerTransportLoggers() {
     registerLogger(sLogger, "transport");
     ConnectionDetails::registerClassLogger();
     DataClient::registerClassLogger();
+    DataLoopListener::registerClassLogger();
     DataServer::registerClassLogger();
     DataStreamClient::registerClassLogger();
     DataStreamServer::registerClassLogger();
@@ -142,6 +144,7 @@ void unregisterTransportLoggers() {
     DataStreamServer::unregisterClassLogger();
     DataStreamClient::unregisterClassLogger();
     DataServer::unregisterClassLogger();
+    DataLoopListener::unregisterClassLogger();
     DataClient::unregisterClassLogger();
     ConnectionDetails::unregisterClassLogger();
     unregisterLogger(sLogger);

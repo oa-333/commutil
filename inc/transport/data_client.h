@@ -14,6 +14,7 @@
 #include "transport/connection_details.h"
 #include "transport/data_allocator.h"
 #include "transport/data_listener.h"
+#include "transport/data_loop_listener.h"
 
 // TODO: put this in a common place
 // TODO: this should be part of client side request entry, and each server side connection as a
@@ -38,6 +39,7 @@ struct COMMUTIL_API ClientBufferData {
     DataClient* m_dataClient;
     uv_buf_t m_buf;
     bool m_shouldDeallocateBuffer;
+    void* m_userData;
 };
 
 // allow customizing allocations for better performance
@@ -80,6 +82,9 @@ public:
     /** @brief Stops the data client IO thread. */
     ErrorCode stop();
 
+    /** @brief Installs a data loop listener. */
+    inline void setDataLoopListener(DataLoopListener* listener) { m_dataLoopListener = listener; }
+
     /** @brief Queries whether the data client is ready for IO. */
     bool isReady();
 
@@ -101,13 +106,15 @@ public:
      * @param length The message length.
      * @param syncCall Specifies whether the call is synchronous (i.e. buffer should not be copied
      * but rather passed by reference).
+     * @param userData any user data that will be passed to the loop listener during onLoopSend().
      * @return The operation's result.
      */
-    ErrorCode write(const char* buffer, uint32_t length, bool syncCall);
+    ErrorCode write(const char* buffer, uint32_t length, bool syncCall, void* userData = nullptr);
 
 protected:
     DataClient(ByteOrder byteOrder)
         : m_dataListener(nullptr),
+          m_dataLoopListener(nullptr),
           m_dataAllocator(nullptr),
           m_byteOrder(byteOrder),
           m_transport(nullptr),
@@ -177,6 +184,7 @@ protected:
 
     // the data listener
     DataListener* m_dataListener;
+    DataLoopListener* m_dataLoopListener;
     DataClientAllocator* m_dataAllocator;
     ConnectionDetails m_connectionDetails;
 

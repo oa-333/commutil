@@ -20,13 +20,13 @@ public:
 
     /** @brief Retrieves the batch size. */
     inline ErrorCode readBatchSize(uint32_t& batchSize) {
-        COMM_DESERIALIZE_INT32(m_is, batchSize);
+        COMM_DESERIALIZE_UINT32(m_is, batchSize);
         return ErrorCode::E_OK;
     }
 
     /** @brief Reads a message from the batch. */
     inline ErrorCode readMsg(const char** msg, uint32_t& length) {
-        COMM_DESERIALIZE_INT32(m_is, length);
+        COMM_DESERIALIZE_UINT32(m_is, length);
         // NOTE: getting pointer instead of copying
         *msg = m_is.getBufRef() + m_is.getOffset();
         return m_is.skipBytes(length);

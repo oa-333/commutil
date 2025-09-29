@@ -6,6 +6,7 @@
 #include "msg/msg_frame_reader.h"
 #include "msg/msg_listener.h"
 #include "msg/msg_multiplexer.h"
+#include "msg/msg_session.h"
 #include "transport/data_server.h"
 
 namespace commutil {
@@ -15,9 +16,13 @@ namespace commutil {
  * virtual method. Utility macros defined in msg.h can be used as follows:
  *
  */
-class COMMUTIL_API MsgServer : public MsgListener, public MsgFrameListener {
+class COMMUTIL_API MsgServer : public MsgListener {
 public:
-    MsgServer() : m_dataServer(nullptr), m_nextSessionId(0) {}
+    MsgServer()
+        : m_dataServer(nullptr),
+          m_sessionListener(nullptr),
+          m_sessionFactory(nullptr),
+          m_nextSessionId(0) {}
     MsgServer(const MsgServer&) = delete;
     MsgServer(MsgServer&&) = delete;
     MsgServer& operator=(const MsgServer&) = delete;
@@ -35,10 +40,16 @@ public:
      * @param bufferSize The buffer size used for each server connection I/O. Specify a buffer size
      * large enough to hold both incoming and outgoing messages, in order to avoid message
      * segmentation and reassembly at the application level.
+     * @param frameListener The frame listener that is used to handle messages within a frame.
+     * @param sessionListener Optional session listener.
+     * @param sessionFactory Optional session factory.
      * @return The operation result.
      */
     virtual ErrorCode initialize(DataServer* dataServer, uint32_t maxConnections,
-                                 uint32_t concurrency, uint32_t bufferSize);
+                                 uint32_t concurrency, uint32_t bufferSize,
+                                 MsgFrameListener* frameListener,
+                                 MsgSessionListener* sessionListener = nullptr,
+                                 MsgSessionFactory* sessionFactory = nullptr);
 
     /** @brief Releases all resources allocated for recovery. */
     virtual ErrorCode terminate();
@@ -79,41 +90,14 @@ public:
      */
     MsgAction onMsg(const ConnectionDetails& connectionDetails, Msg* msg, bool canSaveMsg) override;
 
-    /** @struct Base session. */
-    struct Session {
-        /** @brief Unique session id. */
-        uint64_t m_sessionId;
-
-        /** @brief Incoming unique connection id (used by connected client). */
-        uint64_t m_connectionId;
-
-        /** @brief Incoming connection index (used by connected client). */
-        uint64_t m_connectionIndex;
-
-        Session() : m_sessionId(0), m_connectionId(0), m_connectionIndex(0) {}
-
-        Session(uint64_t sessionId, const ConnectionDetails& connectionDetails)
-            : m_sessionId(sessionId),
-              m_connectionId(connectionDetails.getConnectionId()),
-              m_connectionIndex(connectionDetails.getConnectionIndex()) {}
-
-        virtual ~Session() {}
-    };
-
-protected:
     /**
-     * @brief Override this factory method to create custom session object with additional fields.
-     * @param sessionId The session's unique id.
-     * @param connectionDetails The incoming connection details.
-     * @return Session* The resulting session object or null if failed or request denied.
+     * @brief Sends a reply to a specific client. Use this API for server initiated communication
+     * (e.g. push notifications).
+     * @param connectionDetails The connection details of the recipient.
+     * @param msg The message to send.
+     * @return ErrorCode
      */
-    virtual Session* createSession(uint64_t sessionId, const ConnectionDetails& connectionDetails);
-
-    /**
-     * @brief Notify session disconnected event.
-     * @param session The disconnecting session.
-     */
-    virtual void onDisconnectSession(Session* session, const ConnectionDetails& connectionDetails);
+    ErrorCode replyMsg(const ConnectionDetails& connectionDetails, Msg* msg);
 
     /**
      * @brief Retrieves the session matching client connection details.
@@ -124,16 +108,7 @@ protected:
      * @return E_SESSION_NOT_FOUND If no such session was found.
      * @return E_SESSION_STALE If the matching session was found, but some details are wrong.
      */
-    ErrorCode getSession(const ConnectionDetails& connectionDetails, Session** session);
-
-    /**
-     * @brief Sends a reply to a specific client. Use this API for server initiated communication
-     * (e.g. push notifications).
-     * @param connectionDetails The connection details of the recipient.
-     * @param msg The message to send.
-     * @return ErrorCode
-     */
-    ErrorCode replyMsg(const ConnectionDetails& connectionDetails, Msg* msg);
+    ErrorCode getSession(const ConnectionDetails& connectionDetails, MsgSession** session);
 
 private:
     /** @var TCP server for managing incoming connections. */
@@ -145,13 +120,29 @@ private:
     /** @var Helper message multiplexer for concurrency management. */
     MsgMultiplexer m_msgMultiplexer;
 
+    /** @var The frame reader. */
     MsgFrameReader m_frameReader;
 
+    /** @var Session listener */
+    MsgSessionListener* m_sessionListener;
+
+    /** @var Session factory/ */
+    MsgSessionFactory* m_sessionFactory;
+    MsgSessionFactory m_defaultSessionFactory;
+
     /** @var Session vector. */
-    std::vector<Session*> m_sessions;
+    std::vector<MsgSession*> m_sessions;
 
     /** @var Unique session id generator. */
     std::atomic<uint64_t> m_nextSessionId;
+
+    /**
+     * @brief Override this factory method to create custom session object with additional fields.
+     * @param sessionId The session's unique id.
+     * @param connectionDetails The incoming connection details.
+     * @return Session* The resulting session object or null if failed or request denied.
+     */
+    MsgSession* createSession(uint64_t sessionId, const ConnectionDetails& connectionDetails);
 
     DECLARE_CLASS_LOGGER(Msg)
 };

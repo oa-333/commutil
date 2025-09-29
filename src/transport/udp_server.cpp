@@ -180,7 +180,7 @@ void UdpServer::onRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     if (newConnection) {
         m_dataListener->onConnect(connData->m_connectionDetails, 0);
     }
-    dataServer->onRead(connData, nread, buf, true, false);
+    dataServer->onRead(connData, nread, buf, true);
 }
 
 void UdpServer::onTimerStatic(uv_timer_t* handle) {

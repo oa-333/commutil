@@ -270,7 +270,7 @@ void TcpServer::onPipeReadStatic(uv_stream_t* connection, ssize_t nread, const u
 void TcpServer::onReadStatic(uv_stream_t* connection, ssize_t nread, const uv_buf_t* buf) {
     TcpConnectionData* connectionData = (TcpConnectionData*)(ConnectionData*)connection->data;
     TcpServer* server = (TcpServer*)connectionData->m_server;
-    server->onRead(connectionData, nread, buf, false, false);
+    server->onRead(connectionData, nread, buf, false);
     // close connection if read failed
     if (nread < 0) {
         uv_close((uv_handle_t*)&connectionData->m_socket2, nullptr);

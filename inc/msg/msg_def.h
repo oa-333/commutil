@@ -13,4 +13,4 @@ typedef std::vector<MsgBuffer> MsgBufferArray;
 
 }  // namespace commutil
 
-#endif
+#endif  // __MSG_DEF_H__

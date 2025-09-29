@@ -14,7 +14,7 @@ IMPLEMENT_CLASS_LOGGER(DataServer)
 ErrorCode DataServer::initialize(DataListener* listener, uint32_t maxConnections,
                                  uint32_t bufferSize,
                                  DataServerAllocator* dataAllocator /* = nullptr */) {
-    // TODO: figure out how bufferSize is to be used
+    // TODO: figure out how bufferSize is to be used (pre-allocated buffer per connection)
     (void)bufferSize;
     if (!changeRunState(RunState::RS_IDLE, RunState::RS_STARTING_UP)) {
         return ErrorCode::E_INVALID_STATE;
@@ -44,9 +44,8 @@ ErrorCode DataServer::initialize(DataListener* listener, uint32_t maxConnections
     }
     m_transport->data = this;
     m_dataListener = listener;
-    m_dataAllocator = dataAllocator;
-    if (m_dataAllocator == nullptr) {
-        m_dataAllocator = &m_defaultDataAllocator;
+    if (dataAllocator != nullptr) {
+        m_dataAllocator = dataAllocator;
     }
 
     setRunState(RunState::RS_RUNNING);
@@ -95,7 +94,8 @@ ErrorCode DataServer::stop() {
 }
 
 ErrorCode DataServer::replyMsg(const ConnectionDetails& connectionDetails, const char* buffer,
-                               uint32_t length, bool directBuffer, bool disposeBuffer) {
+                               uint32_t length, bool directBuffer /* = false */,
+                               bool disposeBuffer /* = true */) {
     if (getRunState() != RunState::RS_RUNNING) {
         return ErrorCode::E_INVALID_STATE;
     }
@@ -163,7 +163,8 @@ void DataServer::onAllocBuffer(uv_handle_t* handle, size_t suggestedSize, uv_buf
 }
 
 void DataServer::onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t* buf,
-                        bool isDatagram, bool releaseBuf) {
+                        bool isDatagram) {
+    // TODO: this code is identical also in DataClient, can we refactor to a parent DataChannel?
     if (nread < 0) {
         // notify read error
         m_dataListener->onReadError(connData->m_connectionDetails, (int)nread);
@@ -174,7 +175,7 @@ void DataServer::onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t*
         }
 
         // release buffer
-        if (releaseBuf && buf->base != nullptr) {
+        if (buf->base != nullptr) {
             m_dataAllocator->freeRequestBuffer(buf->base);
         }
         return;
@@ -187,11 +188,11 @@ void DataServer::onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t*
 
     // notify listener
     // TODO: check that nread cast is safe
-    m_dataListener->onBytesReceived(connData->m_connectionDetails, buf->base, (uint32_t)nread,
-                                    isDatagram);
+    DataAction dataAction = m_dataListener->onBytesReceived(connData->m_connectionDetails,
+                                                            buf->base, (uint32_t)nread, isDatagram);
 
     // release buffer
-    if (releaseBuf && buf->base != nullptr) {
+    if (dataAction == DataAction::DATA_CAN_DELETE && buf->base != nullptr) {
         m_dataAllocator->freeRequestBuffer(buf->base);
     }
 }

@@ -15,7 +15,7 @@ void SegmentedInputStream::reset() {
     while (m_head != nullptr) {
         BufferNode* node = m_head;
         m_head = m_head->m_next;
-        delete node->m_buffer;
+        m_bufferDeallocator->deallocateBuffer(node->m_buffer);
         delete node;
     }
     m_tail = nullptr;
@@ -197,7 +197,7 @@ void SegmentedInputStream::copyBytes(char* buffer, uint32_t length) {
 void SegmentedInputStream::removeHead() {
     if (m_head != nullptr) {
         assert(m_head->m_buffer);
-        delete m_head->m_buffer;
+        m_bufferDeallocator->deallocateBuffer(m_head->m_buffer);
         BufferNode* node = m_head;
         m_head = m_head->m_next;
         delete node;

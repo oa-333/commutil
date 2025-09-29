@@ -9,9 +9,8 @@
 #include "msg/msg_backlog.h"
 #include "msg/msg_client.h"
 #include "msg/msg_config.h"
+#include "msg/msg_def.h"
 #include "msg/msg_frame_reader.h"
-#include "msg/msg_frame_writer.h"
-#include "msg/msg_response_handler.h"
 #include "msg/msg_writer.h"
 
 // TODO: add MsgConfig with following members:
@@ -42,13 +41,12 @@ public:
      *
      * @param msgClient The message client (should be passed).
      * @param msgConfig Timeouts and backlog configuration.
-     * @param serverName The name of the destination server (for logging purposes only).
-     * @param statListener Message statistics listener.
-     * @param listener Message listener.
-     * @param assistant Object used in deciding whether a response is faulty (required for resend).
+     * @param frameListener Optional frame listener.
+     * @param statListener Optional statistics listener.
      */
-    ErrorCode initialize(MsgClient* msgClient, const MsgConfig& msgConfig, const char* serverName,
-                         MsgStatListener* statListener, MsgResponseHandler* assistant = nullptr);
+    ErrorCode initialize(MsgClient* msgClient, const MsgConfig& msgConfig = MsgConfig(),
+                         MsgFrameListener* frameListener = nullptr,
+                         MsgStatListener* statListener = nullptr);
 
     /** @brief Terminates the message client. */
     ErrorCode terminate();
@@ -60,7 +58,8 @@ public:
     ErrorCode stop();
 
     /**
-     * @brief Sends a message through the underlying transport. This is not a blocking call.
+     * @brief Sends a single serialized message through the underlying transport. This is not a
+     * blocking call.
      * @param msgId The message id.
      * @param body The message's body.
      * @param len The message's length.
@@ -72,7 +71,7 @@ public:
                       uint16_t flags = 0);
 
     /**
-     * @brief Sends a message through the underlying transport using custom message writer. This is
+     * @brief Sends a message through the underlying transport, using custom message writer. This is
      * not a blocking call.
      * @param msgId The message id.
      * @param msgWriter The message payload writer.
@@ -87,8 +86,22 @@ public:
                       uint16_t flags = 0);
 
     /**
-     * @brief Sends a message through the underlying transport using custom message writer. This is
-     * not a blocking call.
+     * @brief Sends a message batch through the underlying transport using a message buffer array.
+     * This is not a blocking call.
+     * @param msgId The message id.
+     * @param bufferArray The message buffer array.
+     * @param compress Specifies whether to compress the message (using gzip).
+     * @param flags Optional flags to be added to the message header.
+     * @return The operation result.
+     * @note The result handler is invoked in order to decide whether to save the message for
+     * resending. If none was installed and message sending failed, then the message is discarded
+     * and will not be an attempt to resend the message to the server.
+     */
+    ErrorCode sendMsgBatch(uint16_t msgId, const MsgBufferArray& bufferArray, bool compress = false,
+                           uint16_t flags = 0);
+
+    /**
+     * @brief Sends a message through the underlying transport. This is not a blocking call.
      * @param msg The message to send.
      * @return The operation result.
      * @note The message is kept for resending until a response arrived, and then the result
@@ -100,7 +113,7 @@ public:
     /**
      * @brief Sends a message through the underlying transport and waits for the matching response.
      * This is a blocking call, waiting for the matching response to arrive (matched by unique
-     * request id). If an assistant is installed, it will be called to decide whether the
+     * request id). If a response handler is installed, it will be called to decide whether the
      * transaction was successful.
      * @param msgId The message id.
      * @param body The message's body.
@@ -111,9 +124,9 @@ public:
      * send timeout passed through the configuration object in the call to @ref initialize() is
      * used. Indefinite timeout can be used with @ref COMMUTIL_MSG_INFINITE_TIMEOUT.
      * @return The operation result.
-     * @note The assistant is invoked in order to decide whether the transaction was successful or
-     * not. If none was installed then success is assumed. If message sending failed, then the
-     * message is appended to the resend backlog.
+     * @note The response handler is invoked in order to decide whether the transaction was
+     * successful or not. If none was installed then success is assumed. If message sending failed,
+     * then the message is appended to the resend backlog.
      */
     ErrorCode transactMsg(uint16_t msgId, const char* body, size_t len, bool compress = false,
                           uint16_t flags = 0, uint64_t timeoutMillis = COMMUTIL_MSG_CONFIG_TIMEOUT);
@@ -121,7 +134,7 @@ public:
     /**
      * @brief Sends a message through the underlying transport using custom message writer. This is
      * a blocking call, waiting for the matching response to arrive (matched by unique request id).
-     * If an assistant is installed, it will be called to decide whether the transaction was
+     * If a response handler is installed, it will be called to decide whether the transaction was
      * successful.
      * @param msgId The message id.
      * @param msgWriter The message payload writer.
@@ -139,9 +152,30 @@ public:
                           uint16_t flags = 0, uint64_t timeoutMillis = COMMUTIL_MSG_CONFIG_TIMEOUT);
 
     /**
+     * @brief Sends a message batch through the underlying transport using a message buffer array.
+     * This is a blocking call, waiting for the matching response to arrive (matched by unique
+     * request id). If a response handler is installed, it will be called to decide whether the
+     * transaction was successful.
+     * @param msgId The message id.
+     * @param bufferArray The message buffer array.
+     * @param compress Specifies whether to compress the message (using gzip).
+     * @param flags Optional flags to be added to the message header.
+     * @param timeoutMillis Optional timeout for the message transaction. If not specified then the
+     * send timeout passed through the configuration object in the call to @ref initialize() is
+     * used. Indefinite timeout can be used with @ref COMMUTIL_MSG_INFINITE_TIMEOUT.
+     * @return The operation result.
+     * @note The result handler is invoked in order to decide whether to save the message for
+     * resending. If none was installed and message sending failed, then the message is discarded
+     * and there will not be an attempt to resend the message to the server.
+     */
+    ErrorCode transactMsgBatch(uint16_t msgId, const MsgBufferArray& bufferArray,
+                               bool compress = false, uint16_t flags = 0,
+                               uint64_t timeoutMillis = COMMUTIL_MSG_CONFIG_TIMEOUT);
+
+    /**
      * @brief Sends a message through the underlying transport. This is a blocking call, waiting for
-     * the matching response to arrive (matched by unique request id). If an assistant is installed,
-     * it will be called to decide whether the transaction was successful.
+     * the matching response to arrive (matched by unique request id). If a response handler is
+     * installed, it will be called to decide whether the transaction was successful.
      * @param msg The message send.
      * @param timeoutMillis Optional timeout for the message transaction. If not specified then the
      * send timeout passed through the configuration object in the call to @ref initialize() is
@@ -194,11 +228,14 @@ public:
 
 private:
     ErrorCode sendMsgInternal(uint16_t msgId, const char* body, size_t len, bool compress,
-                              uint16_t msgFlags, uint32_t requestFlags, MsgRequestData& requestData,
-                              Msg** msg);
+                              uint16_t msgFlags, uint32_t requestFlags = 0, Msg** msg = nullptr,
+                              MsgRequestData* requestData = nullptr);
     ErrorCode sendMsgInternal(uint16_t msgId, MsgWriter* msgWriter, bool compress,
-                              uint16_t msgFlags, uint32_t requestFlags, MsgRequestData& requestData,
-                              Msg** msg);
+                              uint16_t msgFlags, uint32_t requestFlags = 0, Msg** msg = nullptr,
+                              MsgRequestData* requestData = nullptr);
+    ErrorCode sendMsgInternal(Msg* request, uint32_t requestFlags = 0,
+                              MsgRequestData* requestData = nullptr);
+    ErrorCode transactMsgInternal(Msg* request, uint64_t timeoutMillis);
     ErrorCode recvResponse(MsgRequestData& requestData, Msg* msg, uint64_t timeoutMillis);
 
     /** @brief Resends a message pending in the backlog. */
@@ -206,15 +243,10 @@ private:
 
     // data client and framing protocol members
     MsgClient* m_msgClient;
-    MsgFrameWriter m_frameWriter;
     MsgFrameReader m_frameReader;
-    MsgResponseHandler* m_responseHandler;
 
     // message client configuration
     MsgConfig m_config;
-
-    // log target name (for logging)
-    std::string m_logTargetName;
 
     // statistics listener
     MsgStatListener* m_statListener;

@@ -6,7 +6,9 @@
 
 #include "commutil_common.h"
 #include "commutil_log_imp.h"
+#include "msg/msg_buffer_array_writer.h"
 #include "msg/msg_frame_reader.h"
+#include "msg/msg_frame_writer.h"
 
 // TODO: implement connect/read/write timeouts in the transport layer with timeout notification
 // inside the pool and matching against pending requests (avoid O(n) solution, use some ordered set)
@@ -19,15 +21,13 @@ namespace commutil {
 IMPLEMENT_CLASS_LOGGER(MsgSender)
 
 ErrorCode MsgSender::initialize(MsgClient* msgClient, const MsgConfig& msgConfig,
-                                const char* serverName, MsgStatListener* statListener,
-                                MsgResponseHandler* responseHandler /* = nullptr */) {
+                                MsgFrameListener* frameListener /* = nullptr */,
+                                MsgStatListener* statListener /* = nullptr */) {
     // save configuration
     m_msgClient = msgClient;
     m_config = msgConfig;
-    m_logTargetName = serverName;
     m_statListener = statListener;
-    m_responseHandler = responseHandler;
-    m_frameReader.initialize(m_msgClient->getByteOrder(), m_statListener, m_responseHandler);
+    m_frameReader.initialize(m_msgClient->getByteOrder(), frameListener, m_statListener);
     m_msgClient->setDataLoopListener(this);
     m_backlog.initialize(&m_msgClient->getRequestPool());
     return ErrorCode::E_OK;
@@ -67,13 +67,8 @@ ErrorCode MsgSender::sendMsg(uint16_t msgId, const char* body, size_t len,
         return ErrorCode::E_INVALID_STATE;
     }
 
-    Msg* msg = nullptr;
-    MsgRequestData requestData;
-
-    ErrorCode rc = sendMsgInternal(msgId, body, len, compress, flags, 0, requestData, &msg);
-
-    // NOTE: the message is saved in the pending requests of the message client
-    return rc;
+    return sendMsgInternal(msgId, body, len, compress, flags);
+    // NOTE: the message is saved in the pending requests of the message client even if failed
 }
 
 ErrorCode MsgSender::sendMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress /* = false */,
@@ -83,13 +78,21 @@ ErrorCode MsgSender::sendMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress
         return ErrorCode::E_INVALID_STATE;
     }
 
-    Msg* msg = nullptr;
-    MsgRequestData requestData;
+    return sendMsgInternal(msgId, msgWriter, compress, flags);
+    // NOTE: the message is saved in the pending requests of the message client even if failed
+}
 
-    ErrorCode rc = sendMsgInternal(msgId, msgWriter, compress, flags, 0, requestData, &msg);
+ErrorCode MsgSender::sendMsgBatch(uint16_t msgId, const MsgBufferArray& bufferArray,
+                                  bool compress /* = false */, uint16_t flags /* = 0 */) {
+    // check state
+    if (m_stopResend.load(std::memory_order_relaxed)) {
+        return ErrorCode::E_INVALID_STATE;
+    }
 
-    // NOTE: the message is saved in the pending requests of the message client
-    return rc;
+    MsgBufferArrayWriter writer(bufferArray, m_msgClient->getByteOrder());
+    flags |= COMMUTIL_MSG_FLAG_BATCH;
+    return sendMsgInternal(msgId, &writer, compress, flags);
+    // NOTE: the message is saved in the pending requests of the message client even if failed
 }
 
 ErrorCode MsgSender::sendMsg(Msg* msg) {
@@ -98,20 +101,8 @@ ErrorCode MsgSender::sendMsg(Msg* msg) {
         return ErrorCode::E_INVALID_STATE;
     }
 
-    MsgRequestData requestData;
-    ErrorCode rc = m_msgClient->sendMsg(msg, 0, requestData);
-
-    // update statistics and return
-    if (m_statListener != nullptr) {
-        bool compress = msg->getHeader().isCompressed();
-        uint32_t compressedPayloadSize = compress ? msg->getPayloadSizeBytes() : 0;
-        uint32_t payloadSize =
-            compress ? msg->getHeader().getUncompressedLength() : msg->getPayloadSizeBytes();
-        m_statListener->onSendMsgStats(payloadSize, compressedPayloadSize, (int)rc);
-    }
-
-    // NOTE: the message is saved in the pending requests of the message client
-    return rc;
+    return sendMsgInternal(msg);
+    // NOTE: the message is saved in the pending requests of the message client even if failed
 }
 
 ErrorCode MsgSender::transactMsg(uint16_t msgId, const char* body, size_t len,
@@ -122,31 +113,14 @@ ErrorCode MsgSender::transactMsg(uint16_t msgId, const char* body, size_t len,
         return ErrorCode::E_INVALID_STATE;
     }
 
-    // fix timeout
-    if (timeoutMillis == COMMUTIL_MSG_CONFIG_TIMEOUT) {
-        timeoutMillis = m_config.m_sendTimeoutMillis;
+    // prepare message frame
+    Msg* request = nullptr;
+    ErrorCode rc = MsgFrameWriter::prepareMsgFrame(&request, msgId, body, len, compress, flags);
+    if (rc != ErrorCode::E_OK) {
+        return rc;
     }
 
-    // send/receive message
-    Msg* msg = nullptr;
-    MsgRequestData requestData;
-    ErrorCode rc = sendMsgInternal(msgId, body, len, compress, flags, COMMUTIL_REQUEST_FLAG_TX,
-                                   requestData, &msg);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to transact message, failed sending request: %s", errorCodeToString(rc));
-    } else {
-        // wait for response
-        rc = recvResponse(requestData, msg, timeoutMillis);
-    }
-
-    // add to backlog if failed
-    if (rc != ErrorCode::E_OK) {
-        if (msg->getHeader().getRequestId() == COMMUTIL_MSG_INVALID_REQUEST_ID) {
-            LOG_ERROR("Cannot schedule message resend, reached resource limit");
-            freeMsg(msg);
-        }
-    }
-    return rc;
+    return transactMsgInternal(request, timeoutMillis);
 }
 
 ErrorCode MsgSender::transactMsg(uint16_t msgId, MsgWriter* msgWriter, bool compress /* = false */,
@@ -157,36 +131,31 @@ ErrorCode MsgSender::transactMsg(uint16_t msgId, MsgWriter* msgWriter, bool comp
         return ErrorCode::E_INVALID_STATE;
     }
 
-    // fix timeout
-    if (timeoutMillis == COMMUTIL_MSG_CONFIG_TIMEOUT) {
-        timeoutMillis = m_config.m_sendTimeoutMillis;
+    // prepare message frame
+    Msg* request = nullptr;
+    ErrorCode rc = MsgFrameWriter::prepareMsgFrame(&request, msgId, msgWriter, compress, flags);
+    if (rc != ErrorCode::E_OK) {
+        return rc;
     }
 
-    // send/receive message
-    Msg* msg = nullptr;
-    MsgRequestData requestData;
-    ErrorCode rc = sendMsgInternal(msgId, msgWriter, compress, flags, COMMUTIL_REQUEST_FLAG_TX,
-                                   requestData, &msg);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to transact message, failed sending request: %s", errorCodeToString(rc));
-    } else {
-        // wait for response
-        rc = recvResponse(requestData, msg, timeoutMillis);
-    }
+    return transactMsgInternal(request, timeoutMillis);
+}
 
-    // add to backlog if failed
-    if (rc != ErrorCode::E_OK) {
-        if (msg->getHeader().getRequestId() == COMMUTIL_MSG_INVALID_REQUEST_ID) {
-            LOG_ERROR("Cannot schedule message resend, reached resource limit");
-            freeMsg(msg);
-        }
-    }
-    return rc;
+ErrorCode MsgSender::transactMsgBatch(uint16_t msgId, const MsgBufferArray& bufferArray,
+                                      bool compress /* = false */, uint16_t flags /* = 0 */,
+                                      uint64_t timeoutMillis /* = COMMUTIL_MSG_CONFIG_TIMEOUT */) {
+    MsgBufferArrayWriter writer(bufferArray, m_msgClient->getByteOrder());
+    flags |= COMMUTIL_MSG_FLAG_BATCH;
+    return transactMsg(msgId, &writer, compress, flags, timeoutMillis);
 }
 
 ErrorCode MsgSender::transactMsg(Msg* msg, uint64_t timeoutMillis) {
-    return m_msgClient->transactMsg(
-        msg, timeoutMillis, [this, msg](Msg* response) { return handleResponse(msg, response); });
+    // check state
+    if (m_stopResend.load(std::memory_order_relaxed)) {
+        return ErrorCode::E_INVALID_STATE;
+    }
+
+    return transactMsgInternal(msg, timeoutMillis);
 }
 
 void MsgSender::onLoopStart(uv_loop_t* loop) {
@@ -207,8 +176,7 @@ void MsgSender::onLoopEnd(uv_loop_t* loop) {
     // report any missing response
     uint32_t backlogCount = m_backlog.getEntryCount();
     if (backlogCount > 0) {
-        LOG_ERROR("%s log target has failed to resend %u pending messages", m_logTargetName.c_str(),
-                  backlogCount);
+        LOG_ERROR("Failed to resend %u pending messages", backlogCount);
     }
 }
 
@@ -328,67 +296,103 @@ void MsgSender::onLoopInterrupt(uv_loop_t* loop, void* userData) {
 }
 
 ErrorCode MsgSender::sendMsgInternal(uint16_t msgId, const char* body, size_t len, bool compress,
-                                     uint16_t msgFlags, uint32_t requestFlags,
-                                     MsgRequestData& requestData, Msg** msg) {
-    // start with default headers specified in initialize(), and add additional headers if
-    // any
-    LOG_TRACE("Sending log data to: %s", m_msgClient->getConnectionDetails().toString());
-
-    ErrorCode rc = m_frameWriter.prepareMsgFrame(msg, msgId, body, len, compress, msgFlags);
+                                     uint16_t msgFlags, uint32_t requestFlags /* = 0 */,
+                                     Msg** msg /* = nullptr */,
+                                     MsgRequestData* requestData /* = nullptr */) {
+    Msg* request = nullptr;
+    ErrorCode rc = MsgFrameWriter::prepareMsgFrame(&request, msgId, body, len, compress, msgFlags);
     if (rc != ErrorCode::E_OK) {
         return rc;
     }
 
-    // TODO: if we keep uncompressed size in message header (also good for validation) we
-    // can refactor out the following part into one line: sendMsg(msg). in fact the only varying
-    // part is prepareMsgFrame, so maybe a lambda expression is appropriate.
-
-    // send message
-    rc = m_msgClient->sendMsg(*msg, requestFlags, requestData);
+    rc = sendMsgInternal(request, requestFlags, requestData);
     if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to send message through message client: %s", errorCodeToString(rc));
+        return rc;
     }
 
-    // update statistics and return
-    if (m_statListener != nullptr) {
-        uint32_t compressedPayloadSize = compress ? (*msg)->getPayloadSizeBytes() : 0;
-        m_statListener->onSendMsgStats((uint32_t)len, compressedPayloadSize, (int)rc);
+    // NOTE: the message is saved in the pending requests of the message client and should not be
+    // deleted
+    if (msg != nullptr) {
+        *msg = request;
     }
-
-    // NOTE: the message is saved in the pending requests of the message client
     return rc;
 }
 
 ErrorCode MsgSender::sendMsgInternal(uint16_t msgId, MsgWriter* msgWriter, bool compress,
-                                     uint16_t msgFlags, uint32_t requestFlags,
-                                     MsgRequestData& requestData, Msg** msg) {
-    // start with default headers specified in initialize(), and add additional headers if
-    // any
-    LOG_TRACE("Sending log data to: %s", m_msgClient->getConnectionDetails().toString());
-
-    ErrorCode rc = m_frameWriter.prepareMsgFrame(msg, msgId, msgWriter, compress, msgFlags);
+                                     uint16_t msgFlags, uint32_t requestFlags /* = 0 */,
+                                     Msg** msg /* = nullptr */,
+                                     MsgRequestData* requestData /* = nullptr */) {
+    Msg* request = nullptr;
+    ErrorCode rc = MsgFrameWriter::prepareMsgFrame(&request, msgId, msgWriter, compress, msgFlags);
     if (rc != ErrorCode::E_OK) {
         return rc;
     }
 
+    rc = sendMsgInternal(request, requestFlags, requestData);
+    if (rc != ErrorCode::E_OK) {
+        return rc;
+    }
+
+    // NOTE: the message is saved in the pending requests of the message client and should not be
+    // deleted
+    if (msg != nullptr) {
+        *msg = request;
+    }
+    return rc;
+}
+
+ErrorCode MsgSender::sendMsgInternal(Msg* request, uint32_t requestFlags /* = 0 */,
+                                     MsgRequestData* requestData /* = nullptr */) {
+    // start with default headers specified in initialize(), and add additional headers if
+    // any
+    LOG_TRACE("Sending log data to: %s", m_msgClient->getConnectionDetails().toString());
+
     // send message
-    rc = m_msgClient->sendMsg(*msg, requestFlags, requestData);
+    ErrorCode rc = m_msgClient->sendMsg(request, requestFlags, requestData);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send message through message client: %s", errorCodeToString(rc));
     }
 
     // update statistics and return
     if (m_statListener != nullptr) {
-        uint32_t compressedPayloadSize = compress ? (*msg)->getPayloadSizeBytes() : 0;
-        m_statListener->onSendMsgStats(msgWriter->getPayloadSizeBytes(), compressedPayloadSize,
-                                       (int)rc);
+        bool compress = request->getHeader().isCompressed();
+        uint32_t compressedPayloadSize = compress ? request->getPayloadSizeBytes() : 0;
+        uint32_t payloadSize = compress ? request->getHeader().getUncompressedLength()
+                                        : request->getPayloadSizeBytes();
+        m_statListener->onSendMsgStats(payloadSize, compressedPayloadSize, (int)rc);
+    }
+    return rc;
+}
+
+ErrorCode MsgSender::transactMsgInternal(Msg* request, uint64_t timeoutMillis) {
+    // send/receive message
+    MsgRequestData requestData;
+    ErrorCode rc = sendMsgInternal(request, COMMUTIL_REQUEST_FLAG_TX, &requestData);
+    if (rc != ErrorCode::E_OK) {
+        LOG_ERROR("Failed to transact message, failed sending request: %s", errorCodeToString(rc));
+    } else {
+        // wait for response
+        rc = recvResponse(requestData, request, timeoutMillis);
     }
 
-    // NOTE: the message is saved in the pending requests of the message client
+    // add to backlog if failed
+    if (rc != ErrorCode::E_OK) {
+        if (request->getHeader().getRequestId() == COMMUTIL_MSG_INVALID_REQUEST_ID) {
+            LOG_ERROR("Cannot schedule message resend, reached resource limit");
+            freeMsg(request);
+        }
+    } else {
+        freeMsg(request);
+    }
     return rc;
 }
 
 ErrorCode MsgSender::recvResponse(MsgRequestData& requestData, Msg* msg, uint64_t timeoutMillis) {
+    // fix timeout
+    if (timeoutMillis == COMMUTIL_MSG_CONFIG_TIMEOUT) {
+        timeoutMillis = m_config.m_sendTimeoutMillis;
+    }
+
     // wait for response
     Msg* response = nullptr;
     ErrorCode rc =
@@ -403,12 +407,11 @@ ErrorCode MsgSender::recvResponse(MsgRequestData& requestData, Msg* msg, uint64_
         return rc;
     }
 
+    // unpack frame and dispatch to listener
     rc = handleResponse(msg, response);
     if (rc != ErrorCode::E_OK) {
-        LOG_ERROR(
-            "Failed to transact message, response handler indicates response is not "
-            "successful: %s",
-            errorCodeToString(rc));
+        LOG_ERROR("Failed to transact message, frame listener indicates error: %s",
+                  errorCodeToString(rc));
         // obtain a new request id/index, resend will take place in the next resend round
         rc = renewRequestId(msg);
         if (rc == ErrorCode::E_OK) {
@@ -429,7 +432,7 @@ ErrorCode MsgSender::recvResponse(MsgRequestData& requestData, Msg* msg, uint64_
 
 ErrorCode MsgSender::resendMsg(Msg* msg) {
     MsgRequestData requestData;
-    return m_msgClient->sendMsg(msg, COMMUTIL_REQUEST_FLAG_REUSE, requestData);
+    return m_msgClient->sendMsg(msg, COMMUTIL_REQUEST_FLAG_REUSE, &requestData);
 }
 
 void MsgSender::processPendingResponses() {

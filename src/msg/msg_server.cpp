@@ -10,19 +10,19 @@ namespace commutil {
 IMPLEMENT_CLASS_LOGGER(MsgServer)
 
 ErrorCode MsgServer::initialize(DataServer* dataServer, uint32_t maxConnections,
-                                uint32_t concurrency, uint32_t bufferSize) {
+                                uint32_t concurrency, uint32_t bufferSize,
+                                MsgFrameListener* frameListener,
+                                MsgSessionListener* sessionListener /* = nullptr */,
+                                MsgSessionFactory* sessionFactory /* = nullptr */) {
     ErrorCode rc = m_msgMultiplexer.initialize(&m_msgAssembler, this, maxConnections, concurrency);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to initialize message multiplexer: %s", errorCodeToString(rc));
         return rc;
     }
 
-    rc = m_msgAssembler.initialize(maxConnections, dataServer->getByteOrder(), &m_msgMultiplexer);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to initialize message assembler: %s", errorCodeToString(rc));
-        m_msgMultiplexer.terminate();
-        return rc;
-    }
+    // NOTE: we must first initialize the data server so we can get its installed data allocator and
+    // pass it to the message assembler. Currently there is no special allocator installed. If this
+    // changes in the future, then following this initialization order we will not crash
     rc = dataServer->initialize(&m_msgAssembler, maxConnections, bufferSize);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to initialize transport layer data server: %s", errorCodeToString(rc));
@@ -30,9 +30,25 @@ ErrorCode MsgServer::initialize(DataServer* dataServer, uint32_t maxConnections,
         m_msgMultiplexer.terminate();
         return rc;
     }
+
+    // now we can initialize the message assembler with the data server's allocator
+    rc = m_msgAssembler.initialize(maxConnections, dataServer->getByteOrder(),
+                                   dataServer->getDataAllocator(), &m_msgMultiplexer);
+    if (rc != ErrorCode::E_OK) {
+        LOG_ERROR("Failed to initialize message assembler: %s", errorCodeToString(rc));
+        m_msgMultiplexer.terminate();
+        return rc;
+    }
+
+    // save members
     m_dataServer = dataServer;
     m_sessions.resize(maxConnections, nullptr);
-    m_frameReader.initialize(m_dataServer->getByteOrder(), nullptr, this);
+    m_frameReader.initialize(m_dataServer->getByteOrder(), frameListener);
+    m_sessionListener = sessionListener;
+    m_sessionFactory = sessionFactory;
+    if (m_sessionFactory == nullptr) {
+        m_sessionFactory = &m_defaultSessionFactory;
+    }
     return ErrorCode::E_OK;
 }
 
@@ -103,13 +119,13 @@ bool MsgServer::onConnect(const ConnectionDetails& connectionDetails, int status
     // note: each connection id is unique, so there is no race over the sessions object
     // also the multiplexer guarantees to always pass the same connection id in the same thread
     uint64_t connectionIndex = connectionDetails.getConnectionIndex();
-    Session* session = m_sessions[connectionIndex];
+    MsgSession* session = m_sessions[connectionIndex];
     if (session != nullptr) {
         LOG_WARN(
             "Connection %s refused: invalid connection index, attempt to access an already active "
             "session with connection id "
             "%" PRIu64,
-            connectionDetails.toString(), session->m_connectionId);
+            connectionDetails.toString(), session->getConnectionId());
         return false;
     }
 
@@ -131,16 +147,18 @@ bool MsgServer::onConnect(const ConnectionDetails& connectionDetails, int status
 void MsgServer::onDisconnect(const ConnectionDetails& connectionDetails) {
     // get session object
     uint64_t connectionIndex = connectionDetails.getConnectionIndex();
-    Session* session = m_sessions[connectionIndex];
+    MsgSession* session = m_sessions[connectionIndex];
     if (session == nullptr) {
         LOG_WARN("Attempt to access inactive session during disconnect from %s",
                  connectionDetails.toString());
     } else {
-        // allow subclass to inspect session before moving on to session destruction
-        onDisconnectSession(session, connectionDetails);
+        // allow listener to inspect session before moving on to session destruction
+        if (m_sessionListener != nullptr) {
+            m_sessionListener->onDisconnectSession(session, connectionDetails);
+        }
 
         // delete session object and remove entry from session map
-        delete session;
+        m_sessionFactory->deleteMsgSession(session);
         m_sessions[connectionIndex] = nullptr;
     }
 
@@ -153,6 +171,9 @@ MsgAction MsgServer::onMsg(const ConnectionDetails& connectionDetails, Msg* msg,
     // finally we call handle message for each message buffer
     (void)canSaveMsg;
 
+    // first handle duplicates
+
+    // unpack frame and dispatch to listener
     ErrorCode rc = m_frameReader.readMsgFrame(connectionDetails, msg);
     if (rc != ErrorCode::E_OK) {
         // allow server to denote message is duplicate without issuing error
@@ -168,17 +189,7 @@ MsgAction MsgServer::onMsg(const ConnectionDetails& connectionDetails, Msg* msg,
     return MsgAction::MSG_CAN_DELETE;
 }
 
-MsgServer::Session* MsgServer::createSession(uint64_t sessionId,
-                                             const ConnectionDetails& connectionDetails) {
-    return new (std::nothrow) Session(sessionId, connectionDetails);
-}
-
-void MsgServer::onDisconnectSession(Session* session, const ConnectionDetails& connectionDetails) {
-    (void)session;
-    (void)connectionDetails;
-}
-
-ErrorCode MsgServer::getSession(const ConnectionDetails& connectionDetails, Session** session) {
+ErrorCode MsgServer::getSession(const ConnectionDetails& connectionDetails, MsgSession** session) {
     uint64_t connectionIndex = connectionDetails.getConnectionIndex();
     if (connectionIndex >= m_sessions.size()) {
         LOG_WARN("Attempt to access session with invalid connection index (out of range): %u",
@@ -193,11 +204,12 @@ ErrorCode MsgServer::getSession(const ConnectionDetails& connectionDetails, Sess
         return ErrorCode::E_SESSION_NOT_FOUND;
     }
 
-    if ((*session)->m_connectionId != connectionDetails.getConnectionId()) {
+    if ((*session)->getConnectionId() != connectionDetails.getConnectionId()) {
         // stale session without disconnect
         LOG_WARN("Possible stale session: attempting to access session %u with id %" PRIu64
                  " while session is associated with connection id %" PRIu64,
-                 connectionIndex, connectionDetails.getConnectionId(), (*session)->m_connectionId);
+                 connectionIndex, connectionDetails.getConnectionId(),
+                 (*session)->getConnectionId());
         return ErrorCode::E_SESSION_STALE;
     }
 
@@ -227,6 +239,11 @@ ErrorCode MsgServer::replyMsg(const ConnectionDetails& connectionDetails, Msg* m
     }
     // buffer deallocated by transport after write is finished
     return ErrorCode::E_OK;
+}
+
+MsgSession* MsgServer::createSession(uint64_t sessionId,
+                                     const ConnectionDetails& connectionDetails) {
+    return m_sessionFactory->createMsgSession(sessionId, connectionDetails);
 }
 
 }  // namespace commutil

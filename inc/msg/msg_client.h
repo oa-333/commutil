@@ -32,7 +32,8 @@ public:
      *
      * @param dataClient The transport data client.
      * @param maxConcurrentRequests The maximum number of pending requests allowed for this client.
-     * @param listener Message listener.
+     * @param listener Optional message listener. The listener is notified of incoming messages only
+     * when using the asynchronous API sendMsg().
      * @return The operation's result.
      */
     ErrorCode initialize(DataClient* dataClient, uint32_t maxConcurrentRequests,
@@ -58,12 +59,12 @@ public:
     /**
      * @brief Sends a message through a client connection.
      * @param msg The message to send.
-     * @param requestFlags Specifies additional request flags.
-     * @param[out] requestData If the call is synchronous, then a request data is returned to the
-     * caller, for waiting on the response.
+     * @param requestFlags Optionally specifies additional request flags.
+     * @param[out] requestData Optionally return the request details If the call is synchronous,
+     * then a request data is returned to the caller, for waiting on the response.
      * @return True if the message was sent successfully.
      */
-    ErrorCode sendMsg(Msg* msg, uint32_t requestFlags, MsgRequestData& requestData);
+    ErrorCode sendMsg(Msg* msg, uint32_t requestFlags = 0, MsgRequestData* requestData = nullptr);
 
     /**
      * @brief Transacts with a server (sends a message and waits for the corresponding reply).

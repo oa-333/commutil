@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "commutil_log_imp.h"
+#include "msg/msg_buffer_array_writer.h"
 
 namespace commutil {
 
@@ -87,6 +88,14 @@ ErrorCode MsgFrameWriter::prepareMsgFrame(Msg** msg, uint16_t msgId, MsgWriter* 
     (*msg)->modifyHeader().setBatchSize(msgWriter->getBatchSize());
 
     return ErrorCode::E_OK;
+}
+
+ErrorCode MsgFrameWriter::prepareMsgBatchFrame(Msg** msg, uint16_t msgId,
+                                               const MsgBufferArray& bufferArray,
+                                               ByteOrder byteOrder, bool compress /* = false */,
+                                               uint16_t flags /* = 0 */) {
+    MsgBufferArrayWriter writer(bufferArray, byteOrder);
+    return prepareMsgFrame(msg, msgId, &writer, compress, flags);
 }
 
 }  // namespace commutil

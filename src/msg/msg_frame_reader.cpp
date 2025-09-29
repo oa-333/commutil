@@ -32,7 +32,7 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
             m_statListener->onRecvMsgStats(bufferSize, (uint32_t)decompressedPayload.size());
         }
 
-        // update buffer
+        // update buffer pointer and size
         buffer = decompressedPayload.data();
         bufferSize = (uint32_t)decompressedPayload.size();
     } else {
@@ -47,7 +47,8 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
                                           true, 1);
     }
 
-    // take care of batch
+    // take care of batch:
+    // read batch size
     MsgBatchReader batchReader(buffer, bufferSize, m_byteOrder);
     uint32_t batchSize = 0;
     ErrorCode rc = batchReader.readBatchSize(batchSize);
@@ -56,6 +57,8 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
         m_frameListener->handleMsgError(connectionDetails, msg->getHeader(), (int)rc);
         return rc;
     }
+
+    // verify batch size in header matches
     if (batchSize != msg->getHeader().getBatchSize()) {
         LOG_ERROR("Invalid batch size in message frame, expecting %u, instead got %u",
                   msg->getHeader().getBatchSize(), batchSize);
@@ -64,6 +67,7 @@ ErrorCode MsgFrameReader::readMsgFrame(const ConnectionDetails& connectionDetail
         return ErrorCode::E_DATA_CORRUPT;
     }
 
+    // read message batch and dispatch to frame listener
     for (uint32_t i = 0; i < batchSize; ++i) {
         const char* msgBuffer = nullptr;
         uint32_t length = 0;

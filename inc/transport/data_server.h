@@ -96,7 +96,14 @@ public:
     /** @brief Retrieves the maximum allowed number of connections. */
     inline uint32_t getMaxConnection() const { return m_maxConnections; }
 
+    /** @brief Queries whether this data client requires big-endian conversions. */
     inline ByteOrder getByteOrder() const { return m_byteOrder; }
+
+    /**
+     * @brief Retrieves the installed data allocator (required for asynchronous buffer
+     * deallocation).
+     */
+    inline DataAllocator* getDataAllocator() { return m_dataAllocator; }
 
     /**
      * @brief Sends a reply message through a server. This is a utility method for the listener,
@@ -106,16 +113,17 @@ public:
      * @param buffer The data to send (serialized response). The buffer is copied before sending, so
      * the caller can recycle the buffer just right after this call.
      * @param length The buffer length.
-     * @param directBuffer Specifies whether to avoid copying the input buffer, but rather using it
-     * directly.
-     * @param disposeBuffer Specifies whether to dispose buffer after writing is complete
-     * (regardless of whether it is used as is without copying or if duplicated internally).
+     * @param directBuffer Optionally specifies whether to avoid copying the input buffer, but
+     * rather using it directly. By default output buffer is copied.
+     * @param disposeBuffer Optionally specifies whether to dispose of the buffer after writing is
+     * complete (regardless of whether it is used as is without copying or if duplicated
+     * internally). By default the buffer will be disposed after using it.
      * @return The operation result.
      * @note When specifying to dispose of the input buffer, in case of failure, the caller is
      * responsible for deallocating the buffer.
      */
     ErrorCode replyMsg(const ConnectionDetails& connectionDetails, const char* buffer,
-                       uint32_t length, bool directBuffer, bool disposeBuffer);
+                       uint32_t length, bool directBuffer = false, bool disposeBuffer = true);
 
 protected:
     DataServer(ByteOrder byteOrder)
@@ -127,7 +135,9 @@ protected:
           m_bufferSize(0),
           m_transport(nullptr),
           m_nextConnectionId(0),
-          m_runState(RunState::RS_IDLE) {}
+          m_runState(RunState::RS_IDLE) {
+        m_dataAllocator = &m_defaultDataAllocator;
+    }
     DataServer(const DataServer&) = delete;
     DataServer(DataServer&&) = delete;
     DataServer& operator=(const DataServer&) = delete;
@@ -176,8 +186,7 @@ protected:
     static void onCloseStatic(uv_handle_t* handle);
 
     // handle read request done event
-    void onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t* buf, bool isDatagram,
-                bool releaseBuf);
+    void onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t* buf, bool isDatagram);
 
     // handle write request done event
     void onWrite(ServerBufferData* serverBufferData, int status);

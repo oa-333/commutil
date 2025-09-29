@@ -4,6 +4,7 @@
 #include "comm_util_log.h"
 #include "io/segmented_input_stream.h"
 #include "msg/msg_listener.h"
+#include "transport/data_allocator.h"
 #include "transport/data_listener.h"
 
 namespace commutil {
@@ -21,9 +22,12 @@ public:
      * @brief Initializes the message assembler.
      * @param maxConnections The maximum number of active connections.
      * @param byteOrder Specifies whether the input stream is using big endian byte order.
+     * @param dataAllocator The transport layer's data allocator (required for deallocating incoming
+     * data buffers).
      * @param listener The message listener.
      */
-    ErrorCode initialize(uint32_t maxConnections, ByteOrder byteOrder, MsgListener* listener);
+    ErrorCode initialize(uint32_t maxConnections, ByteOrder byteOrder, DataAllocator* dataAllocator,
+                         MsgListener* listener);
 
     /** @brief Terminates the message assembler. */
     ErrorCode terminate();
@@ -63,8 +67,8 @@ public:
      * @param length The buffer length.
      * @param isDatagram Specifies whether this is a full datagram.
      */
-    void onBytesReceived(const ConnectionDetails& connectionDetails, char* buffer, uint32_t length,
-                         bool isDatagram) final;
+    DataAction onBytesReceived(const ConnectionDetails& connectionDetails, char* buffer,
+                               uint32_t length, bool isDatagram) final;
 
     /**
      * @brief Notify data from connected client was sent to the client.
@@ -75,13 +79,13 @@ public:
     void onBytesSent(const ConnectionDetails& connectionDetails, uint32_t length, int status) final;
 
 private:
-    MsgListener* m_listener;
     struct MsgStream {
         SegmentedInputStream m_is;
         MsgHeader m_msgHeader;
         enum MsgState { MS_WAITING_HEADER, MS_WAITING_BODY, MS_RESYNC } m_state;
 
-        MsgStream(ByteOrder byteOrder) : m_is(byteOrder), m_state(MS_WAITING_HEADER) {}
+        MsgStream(ByteOrder byteOrder, SegmentedInputStream::BufferDeallocator* bufferDeallocator)
+            : m_is(byteOrder, bufferDeallocator), m_state(MS_WAITING_HEADER) {}
         MsgStream(const MsgStream&) = delete;
         MsgStream(MsgStream&&) = delete;
         MsgStream& operator=(const MsgStream&) = delete;
@@ -92,8 +96,29 @@ private:
             m_state = MS_RESYNC;
         }
     };
+
+    class BufferDeallocator : public SegmentedInputStream::BufferDeallocator {
+    public:
+        BufferDeallocator() : m_dataAllocator(nullptr) {}
+        BufferDeallocator(const BufferDeallocator&) = delete;
+        BufferDeallocator(BufferDeallocator&&) = delete;
+        BufferDeallocator& operator=(const BufferDeallocator&) = delete;
+        ~BufferDeallocator() override {}
+
+        inline void setDataAllocator(DataAllocator* dataAllocator) {
+            m_dataAllocator = dataAllocator;
+        }
+
+        void deallocateBuffer(char* buffer) override { m_dataAllocator->freeRequestBuffer(buffer); }
+
+    private:
+        DataAllocator* m_dataAllocator;
+    };
+
+    MsgListener* m_listener;
     MsgStream** m_msgStreams;
     uint32_t m_streamCount;
+    BufferDeallocator m_bufferDeallocator;
 
     void onWaitHeader(MsgStream* msgStream);
     bool onWaitBody(MsgStream* msgStream, const ConnectionDetails& connectionDetails);

@@ -21,9 +21,9 @@ target_sources(
             msg_multiplexer.h
             msg_request_pool.h
             msg_request.h
-            msg_response_handler.h
             msg_sender.h
             msg_server.h
+            msg_session.h
             msg_stat_listener.h
             msg_writer.h
             msg.h)

@@ -86,7 +86,7 @@ int DataClient::waitReady() {
     return m_connectStatus;
 }
 
-ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall,
+ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall /* = false */,
                             void* userData /* = nullptr */) {
     // TODO: the caller should have the chance to install an allocator for buffers
     // next we also need a way to avoid all these allocations, for instance, the message layer has
@@ -179,7 +179,7 @@ void DataClient::onAllocBuffer(uv_handle_t* handle, size_t suggestedSize, uv_buf
     }
 }
 
-void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram, bool releaseBuf) {
+void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram) {
     if (nread < 0) {
         // notify read error
         m_dataListener->onReadError(m_connectionDetails, (int)nread);
@@ -200,10 +200,11 @@ void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram, boo
 
     // notify listener
     // TODO: buffer sizes should be checked in all places for size breach before cast
-    m_dataListener->onBytesReceived(m_connectionDetails, buf->base, (uint32_t)nread, isDatagram);
+    DataAction dataAction = m_dataListener->onBytesReceived(m_connectionDetails, buf->base,
+                                                            (uint32_t)nread, isDatagram);
 
     // release buffer
-    if (releaseBuf && buf->base != nullptr) {
+    if (dataAction == DataAction::DATA_CAN_DELETE && buf->base != nullptr) {
         m_dataAllocator->freeRequestBuffer(buf->base);
     }
 

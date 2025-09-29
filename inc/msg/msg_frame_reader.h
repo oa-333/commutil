@@ -10,7 +10,7 @@ namespace commutil {
 class COMMUTIL_API MsgFrameReader {
 public:
     MsgFrameReader()
-        : m_byteOrder(ByteOrder::HOST_ORDER), m_statListener(nullptr), m_frameListener(nullptr) {}
+        : m_byteOrder(ByteOrder::HOST_ORDER), m_frameListener(nullptr), m_statListener(nullptr) {}
     MsgFrameReader(const MsgFrameReader&) = delete;
     MsgFrameReader(MsgFrameReader&&) = delete;
     MsgFrameReader& operator=(const MsgFrameReader&) = delete;
@@ -19,14 +19,16 @@ public:
     /**
      * @brief Initializes the message frame reader.
      * @param byteOrder The byte order to use (derived from the communication channel).
-     * @param listener The listener that receives the raw message buffers packed within the message
+     * @param frameListener The listener that receives the raw message buffers packed within the
+     * message
+     * @param statListener Optional statistics listener.
      * frame.
      */
-    inline void initialize(ByteOrder byteOrder, MsgStatListener* statListener,
-                           MsgFrameListener* frameListener) {
+    inline void initialize(ByteOrder byteOrder, MsgFrameListener* frameListener,
+                           MsgStatListener* statListener = nullptr) {
         m_byteOrder = byteOrder;
-        m_statListener = statListener;
         m_frameListener = frameListener;
+        m_statListener = statListener;
     }
 
     /**
@@ -39,8 +41,8 @@ public:
 
 private:
     ByteOrder m_byteOrder;
-    MsgStatListener* m_statListener;
     MsgFrameListener* m_frameListener;
+    MsgStatListener* m_statListener;
 
     DECLARE_CLASS_LOGGER(Msg)
 };

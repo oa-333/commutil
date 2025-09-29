@@ -12,7 +12,7 @@ namespace commutil {
 /** @brief Helper class for writing a message batch. */
 class MsgBufferArrayWriter : public MsgWriter {
 public:
-    MsgBufferArrayWriter(MsgBufferArray& msgBufferArray, ByteOrder byteOrder)
+    MsgBufferArrayWriter(const MsgBufferArray& msgBufferArray, ByteOrder byteOrder)
         : m_msgBufferArray(msgBufferArray), m_byteOrder(byteOrder) {
         m_payloadSize = MsgBatchWriter::computePayloadSize(msgBufferArray);
     }
@@ -32,13 +32,13 @@ public:
      * @param payload The payload buffer.
      * @return The operation's result.
      */
-    ErrorCode writeMsg(char* payload) {
+    ErrorCode writeMsg(char* payload) override {
         MsgBatchWriter writer(payload, m_payloadSize, m_byteOrder);
         return writer.writeBatch(m_msgBufferArray);
     }
 
 private:
-    MsgBufferArray& m_msgBufferArray;
+    const MsgBufferArray& m_msgBufferArray;
     ByteOrder m_byteOrder;
     uint32_t m_payloadSize;
 };

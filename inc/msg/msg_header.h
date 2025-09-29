@@ -10,10 +10,10 @@
 // message flags
 
 /** @def Flag denoting payload is compressed. */
-#define COMMUTIL_MSG_FLAG_COMPRESSED 0x01
+#define COMMUTIL_MSG_FLAG_COMPRESSED ((uint16_t)0x0001)
 
 /** @def Flag denoting payload has multiple messages. */
-#define COMMUTIL_MSG_FLAG_BATCH 0x02
+#define COMMUTIL_MSG_FLAG_BATCH ((uint16_t)0x0002)
 
 /** @def Magic word message size. */
 #define COMMUTIL_MSG_MAGIC_SIZE sizeof(uint64_t)

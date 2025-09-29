@@ -92,7 +92,7 @@ void UdpClient::onRecvStatic(uv_udp_t* handle, ssize_t nread, const uv_buf_t* bu
     (void)flags;
     // cast carefully here...
     UdpClient* dataClient = (UdpClient*)(DataClient*)handle->data;
-    dataClient->onRead(nread, buf, true, false);
+    dataClient->onRead(nread, buf, true);
 }
 
 void UdpClient::onSendStatic(uv_udp_send_t* req, int status) {

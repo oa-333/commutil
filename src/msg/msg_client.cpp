@@ -19,18 +19,25 @@ ErrorCode MsgClient::initialize(DataClient* dataClient, uint32_t maxConcurrentRe
         return ErrorCode::E_INVALID_ARGUMENT;
     }
 
-    ErrorCode rc = m_msgAssembler.initialize(1, dataClient->getByteOrder(), this);
-    if (rc != ErrorCode::E_OK) {
-        LOG_ERROR("Failed to initialize message client, message assembler error: %s",
-                  errorCodeToString(rc));
-        return rc;
-    }
-    rc = dataClient->initialize(&m_msgAssembler);
+    // we need to initialize the data client before the assembler, because we need the data
+    // allocator of the data client
+    ErrorCode rc = dataClient->initialize(&m_msgAssembler);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to initialize message client, transport layer error: %s",
                   errorCodeToString(rc));
         return rc;
     }
+
+    // now we can initialize the assembler
+    rc = m_msgAssembler.initialize(1, dataClient->getByteOrder(), dataClient->getDataAllocator(),
+                                   this);
+    if (rc != ErrorCode::E_OK) {
+        LOG_ERROR("Failed to initialize message client, message assembler error: %s",
+                  errorCodeToString(rc));
+        return rc;
+    }
+
+    // save members
     m_dataClient = dataClient;
     m_requestPool.initialize(maxConcurrentRequests);
     m_listener = msgListener;
@@ -64,29 +71,33 @@ ErrorCode MsgClient::stop() {
     return m_dataClient->stop();
 }
 
-ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags, MsgRequestData& requestData) {
+ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags /* = 0 */,
+                             MsgRequestData* requestData /* = nullptr */) {
     // allocate unique request id if needed
     bool reuseRequest = (requestFlags & COMMUTIL_REQUEST_FLAG_REUSE);
     uint64_t requestId =
         reuseRequest ? msg->getHeader().getRequestId() : m_requestPool.fetchAddRequestId();
 
     // grab a slot in the request array at the client data
-    MsgRequest* request =
-        reuseRequest ? m_requestPool.getRequestData(msg)
-                     : m_requestPool.getVacantRequest(requestId, requestData.m_requestIndex);
+    uint32_t requestIndex = 0;
+    MsgRequest* request = reuseRequest ? m_requestPool.getRequestData(msg)
+                                       : m_requestPool.getVacantRequest(requestId, requestIndex);
     if (request == nullptr) {
         LOG_ERROR(reuseRequest ? "Cannot send request: ran out of vacant slots in client"
-                               : "Cannot send request: reused reqeust slot mismatch");
+                               : "Cannot send request: reused request slot mismatch");
         return ErrorCode::E_RESOURCE_LIMIT;
+    }
+    if (requestData != nullptr) {
+        requestData->m_requestId = requestId;
+        requestData->m_requestIndex = requestIndex;
     }
     request->setFlags(requestFlags);
     if (!reuseRequest) {
-        requestData.m_requestId = requestId;
         request->setRequest(msg);
 
         // update message header
-        msg->modifyHeader().setRequestIndex(requestData.m_requestIndex);
-        msg->modifyHeader().setRequestId(requestData.m_requestId);
+        msg->modifyHeader().setRequestIndex(requestIndex);
+        msg->modifyHeader().setRequestId(requestId);
     }
 
     // serialize message into buffer
@@ -130,7 +141,7 @@ ErrorCode MsgClient::transactMsgResponse(
     Msg* msg, Msg** response, uint64_t timeoutMillis /* = COMMUTIL_MSG_INFINITE_TIMEOUT */) {
     // send message
     MsgRequestData requestData;
-    ErrorCode rc = sendMsg(msg, COMMUTIL_REQUEST_FLAG_TX, requestData);
+    ErrorCode rc = sendMsg(msg, COMMUTIL_REQUEST_FLAG_TX, &requestData);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to transact message, failed sending request: %s", errorCodeToString(rc));
         return rc;
@@ -196,10 +207,11 @@ MsgAction MsgClient::onMsg(const ConnectionDetails& connectionDetails, Msg* msg,
     uint32_t requestFlags = 0;
     ErrorCode rc = m_requestPool.setResponse(msg, requestFlags);
 
-    // notify listener if installed
+    // before dealing with any error, we first notify the listener if it is installed
     bool shouldFireNotification = (requestFlags & COMMUTIL_REQUEST_FLAG_TX) ? false : true;
     if (shouldFireNotification && m_listener != nullptr) {
-        // NOTE: listener is not allowed to keep a reference to the message
+        // NOTE: listener is not allowed to keep a reference to the message because it is kept in
+        // the request pool and may be deleted at any time
         m_listener->onMsg(connectionDetails, msg, false);
     }
 

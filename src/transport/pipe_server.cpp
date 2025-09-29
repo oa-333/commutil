@@ -114,7 +114,7 @@ void PipeServer::onConnectStatic(uv_stream_t* server, int status) {
 void PipeServer::onReadStatic(uv_stream_t* connection, ssize_t nread, const uv_buf_t* buf) {
     PipeConnectionData* connectionData = (PipeConnectionData*)(ConnectionData*)connection->data;
     PipeServer* server = (PipeServer*)connectionData->m_server;
-    server->onRead(connectionData, nread, buf, false, false);
+    server->onRead(connectionData, nread, buf, false);
     // close connection if read failed
     if (nread < 0) {
         uv_close((uv_handle_t*)&connectionData->m_pipe, onCloseStatic);

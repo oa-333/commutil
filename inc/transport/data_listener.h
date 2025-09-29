@@ -8,8 +8,17 @@
 
 namespace commutil {
 
-// forward declaration
-class COMMUTIL_API DataClient;
+/** @brief Data action constants. */
+enum class DataAction : uint32_t {
+    /** @var No specific action for the data buffer is specified. */
+    DATA_NO_ACTION,
+
+    /** @var Specifies that the data buffer can be deleted. */
+    DATA_CAN_DELETE,
+
+    /** @brief Specifies that the data buffer CANNOT be delete. */
+    DATA_CANNOT_DELETE
+};
 
 class COMMUTIL_API DataListener {
 public:
@@ -36,29 +45,36 @@ public:
     virtual void onDisconnect(const ConnectionDetails& connectionDetails) = 0;
 
     /**
-     * @brief Notify about client read error.
+     * @brief Notifies about client read error.
      * @param connectionDetails The connection details.
      */
     virtual void onReadError(const ConnectionDetails& connectionDetails, int status) = 0;
 
     /**
-     * @brief Notify about client write error.
+     * @brief Notifies about client write error.
      * @param connectionDetails The connection details.
      */
     virtual void onWriteError(const ConnectionDetails& connectionDetails, int status) = 0;
 
     /**
      * @brief Handle incoming data from a connected client.
+     *
+     * @note The listener is responsible for deleting the buffer, when done with it, at the @ref
+     * DataAllocator from which the buffer originated (i.e. at @ref DataClient or @ref DataServer).
+     *
      * @param connectionDetails The connection details.
      * @param buffer The buffer pointer.
      * @param length The buffer length.
-     * @param isDatagram Specifies whether this is a full datagram.
+     * @param isDatagram Specifies whether this is a full datagram (may assist in simpler parsing).
+     * @return What to do with the incoming data buffer. If the listener keeps the buffer for later
+     * use, then it should return @ref DataAction::DATA_CANNOT_DELETE, otherwise @ref
+     * DataAction::DATA_CAN_DELETE.
      */
-    virtual void onBytesReceived(const ConnectionDetails& connectionDetails, char* buffer,
-                                 uint32_t length, bool isDatagram) = 0;
+    virtual DataAction onBytesReceived(const ConnectionDetails& connectionDetails, char* buffer,
+                                       uint32_t length, bool isDatagram) = 0;
 
     /**
-     * @brief Notify data from connected client was sent to the client.
+     * @brief Notifies data from connected client was sent to the client.
      * @param connectionDetails The connection details.
      * @param length The number of bytes sent.
      * @param status The operation result status.

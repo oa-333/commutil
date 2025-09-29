@@ -82,11 +82,7 @@ void DataStreamClient::onConnectStatic(uv_connect_t* req, int status) {
 void DataStreamClient::onReadStatic(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf) {
     // cast carefully here
     DataStreamClient* dataClient = (DataStreamClient*)(DataClient*)client->data;
-    dataClient->onRead(nread, buf, false, false);
-
-    // TODO: is this comment still true? (we pass false above to avoid deallocation)
-    // assembler is responsible for deallocating the buffer, so we avoid excess memcpy
-    // free(buf->base);
+    dataClient->onRead(nread, buf, false);
 }
 
 void DataStreamClient::onAsyncWriteStatic(uv_async_t* asyncReq) {

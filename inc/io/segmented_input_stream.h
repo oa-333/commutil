@@ -18,13 +18,32 @@ namespace commutil {
  */
 class COMMUTIL_API SegmentedInputStream : public InputStream {
 public:
+    /** @brief Helper interface for deallocating incoming buffers. */
+    class COMMUTIL_API BufferDeallocator {
+    public:
+        virtual ~BufferDeallocator() {}
+
+        virtual void deallocateBuffer(char* buffer) = 0;
+
+    protected:
+        BufferDeallocator() {}
+        BufferDeallocator(const BufferDeallocator&) = delete;
+        BufferDeallocator(BufferDeallocator&&) = delete;
+        BufferDeallocator& operator=(const BufferDeallocator&) = delete;
+    };
+
     /**
      * @brief Construct a new segmented input stream object.
      * @param byteOrder Specifies whether the buffer data is usign big endian byte order.
-     * @param allocator Optional allocator to use for memory allocations.
+     * @param bufferDeallocator Buffer deallocator used for disposing of incoming data buffers.
      */
-    SegmentedInputStream(ByteOrder byteOrder)
-        : InputStream(byteOrder), m_head(nullptr), m_tail(nullptr), m_offset(0), m_size(0) {}
+    SegmentedInputStream(ByteOrder byteOrder, BufferDeallocator* bufferDeallocator)
+        : InputStream(byteOrder),
+          m_head(nullptr),
+          m_tail(nullptr),
+          m_offset(0),
+          m_size(0),
+          m_bufferDeallocator(bufferDeallocator) {}
 
     SegmentedInputStream(const SegmentedInputStream&) = delete;
     SegmentedInputStream(SegmentedInputStream&&) = delete;
@@ -112,6 +131,7 @@ private:
     BufferNode* m_tail;
     uint32_t m_offset;
     uint32_t m_size;
+    BufferDeallocator* m_bufferDeallocator;
 
     inline BufferNode* allocBufferNode(char* buffer, uint32_t length, BufferNode* next) {
         return new (std::nothrow) BufferNode(buffer, length, next);

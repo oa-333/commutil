@@ -101,15 +101,23 @@ public:
     inline ByteOrder getByteOrder() const { return m_byteOrder; }
 
     /**
+     * @brief Retrieves the installed data allocator (required for asynchronous buffer
+     * deallocation).
+     */
+    inline DataAllocator* getDataAllocator() { return m_dataAllocator; }
+
+    /**
      * @brief Writes a data buffer through the underlying transport channel.
      * @param buffer The message buffer.
      * @param length The message length.
-     * @param syncCall Specifies whether the call is synchronous (i.e. buffer should not be copied
-     * but rather passed by reference).
+     * @param syncCall Optionally specifies whether the call is synchronous (i.e. buffer should not
+     * be copied but rather passed by reference). By default call is asynchronous and the data
+     * buffer is copied before being sent asynchronously through the transport layer.
      * @param userData any user data that will be passed to the loop listener during onLoopSend().
      * @return The operation's result.
      */
-    ErrorCode write(const char* buffer, uint32_t length, bool syncCall, void* userData = nullptr);
+    ErrorCode write(const char* buffer, uint32_t length, bool syncCall = false,
+                    void* userData = nullptr);
 
 protected:
     DataClient(ByteOrder byteOrder)
@@ -159,7 +167,7 @@ protected:
     static void onStopTransportStatic(void* data);
 
     // handle read request done event
-    void onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram, bool releaseBuf);
+    void onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram);
 
     // handle write request done event
     void onWrite(ClientBufferData* clientBufferData, int status);

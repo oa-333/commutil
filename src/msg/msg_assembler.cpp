@@ -9,7 +9,8 @@ namespace commutil {
 IMPLEMENT_CLASS_LOGGER(MsgAssembler)
 
 ErrorCode MsgAssembler::initialize(uint32_t maxConnections, ByteOrder byteOrder,
-                                   MsgListener* listener) {
+                                   DataAllocator* dataAllocator, MsgListener* listener) {
+    m_bufferDeallocator.setDataAllocator(dataAllocator);
     m_msgStreams = new (std::nothrow) MsgStream*[maxConnections];
     if (m_msgStreams == nullptr) {
         LOG_ERROR("Failed to allocate %u message streams for assembly, out of memory",
@@ -17,7 +18,7 @@ ErrorCode MsgAssembler::initialize(uint32_t maxConnections, ByteOrder byteOrder,
         return ErrorCode::E_NOMEM;
     }
     for (uint32_t i = 0; i < maxConnections; ++i) {
-        m_msgStreams[i] = new (std::nothrow) MsgStream(byteOrder);
+        m_msgStreams[i] = new (std::nothrow) MsgStream(byteOrder, &m_bufferDeallocator);
         if (m_msgStreams[i] == nullptr) {
             LOG_ERROR("Failed to allocate message stream for assembly, out of memory");
             for (uint32_t j = 0; j < i; ++j) {
@@ -69,8 +70,8 @@ void MsgAssembler::onWriteError(const ConnectionDetails& connectionDetails, int 
     // TODO: report statistics
 }
 
-void MsgAssembler::onBytesReceived(const ConnectionDetails& connectionDetails, char* buffer,
-                                   uint32_t length, bool isDatagram) {
+commutil::DataAction MsgAssembler::onBytesReceived(const ConnectionDetails& connectionDetails,
+                                                   char* buffer, uint32_t length, bool isDatagram) {
     // TODO: isDatagram not used, we can avoid all assembly stuff, right?
     (void)isDatagram;
     LOG_DEBUG("%u bytes received from %s", length, connectionDetails.toString());
@@ -102,6 +103,9 @@ void MsgAssembler::onBytesReceived(const ConnectionDetails& connectionDetails, c
                 break;
         }
     }
+
+    // the message assembler deletes incoming buffers by itself
+    return DataAction::DATA_CANNOT_DELETE;
 }
 
 void MsgAssembler::onBytesSent(const ConnectionDetails& connectionDetails, uint32_t length,

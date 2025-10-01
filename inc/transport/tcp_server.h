@@ -87,7 +87,6 @@ private:
     struct TcpConnectionData : public ConnectionData {
         uv_tcp_t m_socket;  // this socket is not used after transfer through pipe
         uv_tcp_t m_socket2;
-        uv_shutdown_t m_shutdownReq;
 
         TcpConnectionData() {}
         ~TcpConnectionData() override {}

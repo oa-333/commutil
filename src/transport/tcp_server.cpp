@@ -427,7 +427,8 @@ void TcpServer::handleNewConnection(uv_stream_t* server, int status) {
         connectionData->m_isUsed = 0;
     }
     writeReq->data = this;
-    uv_buf_t buf = uv_buf_init((char*)"a", 1);  // use some dummy buffer, it is not used anyway
+    uv_buf_t buf =
+        uv_buf_init(const_cast<char*>("a"), 1);  // use some dummy buffer, it is not used anyway
     res = uv_write2(writeReq, (uv_stream_t*)&taskData.m_serverPipe, &buf, 1,
                     (uv_stream_t*)&connectionData->m_socket, onWrite2Static);
     if (res < 0) {

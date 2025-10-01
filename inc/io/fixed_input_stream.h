@@ -36,8 +36,8 @@ public:
 
     /**
      * @brief Peeks for a few bytes in the stream without pulling them.
-     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesRead (if
-     * supplied) contains the actual number of bytes that were read.
+     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesPeeked (if
+     * supplied) contains the actual number of bytes that were peeked.
      * @param buffer Received the bytes peek from the stream.
      * @param length The amount of bytes to peek.
      * @param[out] bytesPeeked Optionally on return contains the number of bytes actually peeked.

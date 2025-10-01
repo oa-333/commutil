@@ -7,7 +7,7 @@
 #include "output_stream.h"
 
 #ifdef COMMUTIL_WINDOWS
-#include "winsock2.h"
+#include "WinSock2.h"
 #else
 #include <endian.h>
 #include <netinet/in.h>
@@ -51,8 +51,8 @@ protected:
     Serializable& operator=(const Serializable&) = delete;
 };
 
-/** @brief Serializes 1-byte signed integer. */
-#define COMM_SERIALIZE_INT8(os, value)            \
+/** @brief Serializes 1-byte unsigned integer. */
+#define COMM_SERIALIZE_UINT8(os, value)           \
     {                                             \
         assert(sizeof(value) == 1);               \
         commutil::ErrorCode rc = os.write(value); \
@@ -61,47 +61,47 @@ protected:
         }                                         \
     }
 
-/** @brief Serializes 1-byte unsigned integer. */
-#define COMM_SERIALIZE_UINT8(os, value) COMM_SERIALIZE_INT8(os, value)
-
-/** @brief Serializes 2-byte signed integer. */
-#define COMM_SERIALIZE_INT16(os, value)                                                          \
-    {                                                                                            \
-        assert(sizeof(value) == 2);                                                              \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htons((uint16_t)value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                                   \
-            return rc;                                                                           \
-        }                                                                                        \
-    }
+/** @brief Serializes 1-byte signed integer. */
+#define COMM_SERIALIZE_INT8(os, value) COMM_SERIALIZE_UINT8(os, ((uint8_t)value))
 
 /** @brief Serializes 2-byte unsigned integer. */
-#define COMM_SERIALIZE_UINT16(os, value) COMM_SERIALIZE_INT16(os, value)
-
-/** @brief Serializes 4-byte integer. */
-#define COMM_SERIALIZE_INT32(os, value)                                                          \
-    {                                                                                            \
-        assert(sizeof(value) == 4);                                                              \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonl((uint32_t)value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                                   \
-            return rc;                                                                           \
-        }                                                                                        \
+#define COMM_SERIALIZE_UINT16(os, value)                                               \
+    {                                                                                  \
+        assert(sizeof(value) == 2);                                                    \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htons(value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                         \
+            return rc;                                                                 \
+        }                                                                              \
     }
+
+/** @brief Serializes 2-byte signed integer. */
+#define COMM_SERIALIZE_INT16(os, value) COMM_SERIALIZE_UINT16(os, ((uint16_t)value))
 
 /** @brief Serializes 4-byte unsigned integer. */
-#define COMM_SERIALIZE_UINT32(os, value) COMM_SERIALIZE_INT32(os, value)
-
-/** @brief Serializes 8-byte integer. */
-#define COMM_SERIALIZE_INT64(os, value)                                                           \
-    {                                                                                             \
-        assert(sizeof(value) == 8);                                                               \
-        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonll((uint64_t)value) : value); \
-        if (rc != commutil::ErrorCode::E_OK) {                                                    \
-            return rc;                                                                            \
-        }                                                                                         \
+#define COMM_SERIALIZE_UINT32(os, value)                                               \
+    {                                                                                  \
+        assert(sizeof(value) == 4);                                                    \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonl(value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                         \
+            return rc;                                                                 \
+        }                                                                              \
     }
 
+/** @brief Serializes 4-byte signed integer. */
+#define COMM_SERIALIZE_INT32(os, value) COMM_SERIALIZE_UINT32(os, ((uint32_t)value))
+
 /** @brief Serializes 8-byte unsigned integer. */
-#define COMM_SERIALIZE_UINT64(os, value) COMM_SERIALIZE_INT64(os, value)
+#define COMM_SERIALIZE_UINT64(os, value)                                                \
+    {                                                                                   \
+        assert(sizeof(value) == 8);                                                     \
+        commutil::ErrorCode rc = os.write(os.isNetworkOrder() ? htonll(value) : value); \
+        if (rc != commutil::ErrorCode::E_OK) {                                          \
+            return rc;                                                                  \
+        }                                                                               \
+    }
+
+/** @brief Serializes 8-byte signed integer. */
+#define COMM_SERIALIZE_INT64(os, value) COMM_SERIALIZE_UINT64(os, ((uint64_t)value))
 
 /** @brief Serializes boolean value. */
 #define COMM_SERIALIZE_BOOL(os, value)             \
@@ -118,16 +118,16 @@ protected:
     {                                                           \
         switch (sizeof(value)) {                                \
             case 1:                                             \
-                COMM_SERIALIZE_INT8(os, (uint8_t)(value));      \
+                COMM_SERIALIZE_UINT8(os, (uint8_t)(value));     \
                 break;                                          \
             case 2:                                             \
-                COMM_SERIALIZE_INT16(os, (uint16_t)(value));    \
+                COMM_SERIALIZE_UINT16(os, (uint16_t)(value));   \
                 break;                                          \
             case 4:                                             \
-                COMM_SERIALIZE_INT32(os, (uint32_t)(value));    \
+                COMM_SERIALIZE_UINT32(os, (uint32_t)(value));   \
                 break;                                          \
             case 8:                                             \
-                COMM_SERIALIZE_INT64(os, (uint64_t)(value));    \
+                COMM_SERIALIZE_UINT64(os, (uint64_t)(value));   \
                 break;                                          \
             default:                                            \
                 return commutil::ErrorCode::E_INVALID_ARGUMENT; \
@@ -156,7 +156,7 @@ protected:
 /** @def Serializes length-prepended std::string. */
 #define COMM_SERIALIZE_STRING(os, value)                                       \
     {                                                                          \
-        COMM_SERIALIZE_INT32(os, (uint32_t)value.length());                    \
+        COMM_SERIALIZE_UINT32(os, (uint32_t)value.length());                   \
         commutil::ErrorCode rc = os.writeBytes(value.c_str(), value.length()); \
         if (rc != commutil::ErrorCode::E_OK) {                                 \
             return rc;                                                         \
@@ -177,7 +177,7 @@ protected:
 #define COMM_SERIALIZE_BUFFER(os, buffer)                           \
     {                                                               \
         uint32_t length = (uint32_t)buffer.size();                  \
-        COMM_SERIALIZE_INT32(os, length);                           \
+        COMM_SERIALIZE_UINT32(os, length);                          \
         commutil::ErrorCode rc = os.writeBytes(&buffer[0], length); \
         if (rc != commutil::ErrorCode::E_OK) {                      \
             return rc;                                              \
@@ -284,24 +284,24 @@ protected:
     }
 
 /** @brief Deserializes enumerated value. */
-#define COMM_DESERIALIZE_ENUM(is, value)                        \
-    {                                                           \
-        switch (sizeof(value)) {                                \
-            case 1:                                             \
-                COMM_DESERIALIZE_INT8(is, (uint8_t&)(value));   \
-                break;                                          \
-            case 2:                                             \
-                COMM_DESERIALIZE_INT16(is, (uint16_t&)(value)); \
-                break;                                          \
-            case 4:                                             \
-                COMM_DESERIALIZE_INT32(is, (uint32_t&)(value)); \
-                break;                                          \
-            case 8:                                             \
-                COMM_DESERIALIZE_INT64(is, (uint64_t&)(value)); \
-                break;                                          \
-            default:                                            \
-                return commutil::ErrorCode::E_INVALID_ARGUMENT; \
-        }                                                       \
+#define COMM_DESERIALIZE_ENUM(is, value)                         \
+    {                                                            \
+        switch (sizeof(value)) {                                 \
+            case 1:                                              \
+                COMM_DESERIALIZE_UINT8(is, (uint8_t&)(value));   \
+                break;                                           \
+            case 2:                                              \
+                COMM_DESERIALIZE_UINT16(is, (uint16_t&)(value)); \
+                break;                                           \
+            case 4:                                              \
+                COMM_DESERIALIZE_UINT32(is, (uint32_t&)(value)); \
+                break;                                           \
+            case 8:                                              \
+                COMM_DESERIALIZE_UINT64(is, (uint64_t&)(value)); \
+                break;                                           \
+            default:                                             \
+                return commutil::ErrorCode::E_INVALID_ARGUMENT;  \
+        }                                                        \
     }
 
 /** @brief Deserializes generic data (e.g. falt struct. No byte ordering takes place). */
@@ -326,7 +326,7 @@ protected:
 #define COMM_DESERIALIZE_STRING(is, value)                                 \
     {                                                                      \
         uint32_t length = 0;                                               \
-        COMM_DESERIALIZE_INT32(is, length);                                \
+        COMM_DESERIALIZE_UINT32(is, length);                               \
         std::vector<char> buf(length + 1, 0);                              \
         uint32_t bytesRead = 0;                                            \
         commutil::ErrorCode rc = is.readBytes(&buf[0], length, bytesRead); \
@@ -355,7 +355,7 @@ protected:
 #define COMM_DESERIALIZE_BUFFER(os, buffer)                        \
     {                                                              \
         uint32_t length = 0;                                       \
-        COMM_DESERIALIZE_INT32(is, length);                        \
+        COMM_DESERIALIZE_UINT32(is, length);                       \
         buffer.resize(length, 0);                                  \
         commutil::ErrorCode rc = is.readBytes(&buffer[0], length); \
         if (rc != commutil::ErrorCode::E_OK) {                     \

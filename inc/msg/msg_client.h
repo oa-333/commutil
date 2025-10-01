@@ -32,8 +32,8 @@ public:
      *
      * @param dataClient The transport data client.
      * @param maxConcurrentRequests The maximum number of pending requests allowed for this client.
-     * @param listener Optional message listener. The listener is notified of incoming messages only
-     * when using the asynchronous API sendMsg().
+     * @param msgListener Optional message listener. The listener is notified of incoming messages
+     * only when using the asynchronous API sendMsg().
      * @return The operation's result.
      */
     ErrorCode initialize(DataClient* dataClient, uint32_t maxConcurrentRequests,

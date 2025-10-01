@@ -21,7 +21,7 @@ public:
 
     /**
      * @brief Computes the required payload size for serializing a buffer array.
-     * @param bufferArray The buffer array.
+     * @param msgBufferArray The buffer array.
      * @return The computed size.
      */
     static uint32_t computePayloadSize(const MsgBufferArray& msgBufferArray);

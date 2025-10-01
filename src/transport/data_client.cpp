@@ -104,7 +104,7 @@ ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall /
     // - allocate/free write request
 
     // allocate or copy buffer
-    uv_buf_t buf = syncCall ? uv_buf_init((char*)buffer, length)
+    uv_buf_t buf = syncCall ? uv_buf_init(const_cast<char*>(buffer), length)
                             : uv_buf_init(m_dataAllocator->allocateRequestBuffer(length), length);
     if (!syncCall) {
         memcpy(buf.base, buffer, length);

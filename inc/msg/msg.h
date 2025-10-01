@@ -25,7 +25,7 @@ public:
     inline const MsgHeader& getHeader() const { return m_header; }
     inline MsgHeader& modifyHeader() { return m_header; }
 
-    inline const char* getPayload() const { return (char*)(this + 1); }
+    inline const char* getPayload() const { return (const char*)(this + 1); }
     inline char* modifyPayload() { return (char*)(this + 1); }
     inline uint32_t getPayloadSizeBytes() const {
         return m_header.getLength() - (uint32_t)sizeof(Msg);

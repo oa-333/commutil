@@ -19,7 +19,7 @@ public:
     MsgBufferArrayWriter() = delete;
     MsgBufferArrayWriter(const MsgBufferArrayWriter&) = delete;
     MsgBufferArrayWriter& operator=(const MsgBufferArrayWriter&) = delete;
-    ~MsgBufferArrayWriter() {}
+    ~MsgBufferArrayWriter() override {}
 
     /** @brief Retrieves the message payload size in bytes. */
     uint32_t getPayloadSizeBytes() override { return m_payloadSize; }

@@ -7,6 +7,8 @@ Supported platforms are:
 - Linux
 - MinGW
 
+Compilation with clang is also supported on all platforms.
+
 ## Description
 
 The commutil library provides infrastructure for:

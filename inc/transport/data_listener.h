@@ -40,13 +40,13 @@ public:
     /**
      * @brief Notifies that a data client has disconnected and cannot be used for I/O anymore
      * (stream channel only).
-     * @param client The disconnecting client.
+     * @param connectionDetails The disconnecting client's connection details.
      */
     virtual void onDisconnect(const ConnectionDetails& connectionDetails) = 0;
 
     /**
      * @brief Notifies about client read error.
-     * @param connectionDetails The connection details.
+     * @param connectionDetails The connecting client's connection details.
      */
     virtual void onReadError(const ConnectionDetails& connectionDetails, int status) = 0;
 

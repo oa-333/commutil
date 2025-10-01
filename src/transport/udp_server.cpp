@@ -140,8 +140,8 @@ void UdpServer::onRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     }
 
     // convert IP address to integer and use concurrent hash table to get connection index and
-    uint64_t ipAddr = ((sockaddr_in*)addr)->sin_addr.s_addr;
-    ipAddr = ipAddr << 32 | ((sockaddr_in*)addr)->sin_port;
+    uint64_t ipAddr = ((const sockaddr_in*)addr)->sin_addr.s_addr;
+    ipAddr = ipAddr << 32 | ((const sockaddr_in*)addr)->sin_port;
 
     // get connection data from hash table or create new one
     bool newConnection = false;

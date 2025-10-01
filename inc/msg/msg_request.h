@@ -27,13 +27,13 @@ typedef uint64_t commutil_request_id_t;
  * @def Flag denoting the request originates from a full transaction, and therefore a notification
  * for the incoming reply should not be fired.
  */
-#define COMMUTIL_REQUEST_FLAG_TX 0x00000001
+#define COMMUTIL_REQUEST_FLAG_TX ((uint32_t)0x00000001)
 
 /**
  * @def Flag denoting the request object for the message is being reused, and there is no need to
  * search for a vacant request slot.
  */
-#define COMMUTIL_REQUEST_FLAG_REUSE 0x00000002
+#define COMMUTIL_REQUEST_FLAG_REUSE ((uint32_t)0x00000002)
 
 /** @enum Request status constants. */
 enum class MsgRequestStatus : uint32_t { RS_IDLE, RS_PENDING, RS_ARRIVED, RS_ABORTED };

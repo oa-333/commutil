@@ -14,7 +14,7 @@ ErrorCode DataLoopListener::startLoopTimer(uv_loop_t* loop, uint64_t& timerId,
     std::pair<TimerMap::iterator, bool> resPair =
         m_timerMap.insert(TimerMap::value_type(timerId, TimerData()));
     if (!resPair.second) {
-        LOG_ERROR("Intenral error, duplicate timer id %" PRIu64, timerId);
+        LOG_ERROR("Internal error, duplicate timer id %" PRIu64, timerId);
         return ErrorCode::E_INTERNAL_ERROR;
     }
 
@@ -163,12 +163,13 @@ void DataLoopListener::onTimerStatic(uv_timer_t* handle) {
     listener->onLoopTimer(handle->loop, timerData->m_timerId);
 }
 
-void DataLoopListener::onInterruptStatic(uv_async_t* handle) {
+void DataLoopListener::onInterruptStatic(uv_async_t* asyncReq) {
     std::pair<DataLoopListener*, void*>* listenerPair =
-        (std::pair<DataLoopListener*, void*>*)handle->data;
-    listenerPair->first->onLoopInterrupt(handle->loop, listenerPair->second);
+        (std::pair<DataLoopListener*, void*>*)asyncReq->data;
+    listenerPair->first->onLoopInterrupt(asyncReq->loop, listenerPair->second);
     delete listenerPair;
-    uv_close((uv_handle_t*)handle, [](uv_handle_t* handle) -> void { delete (uv_async_t*)handle; });
+    uv_close((uv_handle_t*)asyncReq,
+             [](uv_handle_t* handle) -> void { delete (uv_async_t*)handle; });
 }
 
 }  // namespace commutil

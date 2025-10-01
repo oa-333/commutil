@@ -67,7 +67,7 @@ public:
     /**
      * @brief Initializes the data client.
      * @param listener The data listener.
-     * @param allocator Optional allocator for various phases in the I/O pipeline.
+     * @param dataAllocator Optional allocator for various phases in the I/O pipeline.
      * @return The operation's result.
      * @note The data client is ready for usage only after
      */

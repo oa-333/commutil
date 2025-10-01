@@ -100,7 +100,8 @@ ErrorCode DataServer::replyMsg(const ConnectionDetails& connectionDetails, const
         return ErrorCode::E_INVALID_STATE;
     }
     uv_buf_t buf = uv_buf_init(
-        directBuffer ? (char*)buffer : m_dataAllocator->allocateRequestBuffer(length), length);
+        directBuffer ? const_cast<char*>(buffer) : m_dataAllocator->allocateRequestBuffer(length),
+        length);
     buf.len = length;
     if (!directBuffer) {
         memcpy(buf.base, buffer, length);

@@ -75,7 +75,7 @@ public:
      * @param bufferSize The buffer size used for each server connection I/O. Specify a buffer size
      * large enough to hold both incoming and outgoing messages, in order to avoid message
      * segmentation and reassembly at the application level.
-     * @param allocator Optional allocator for various phases in the I/O pipeline.
+     * @param dataAllocator Optional allocator for various phases in the I/O pipeline.
      * @return ErrorCode The operation result.
      */
     ErrorCode initialize(DataListener* listener, uint32_t maxConnections, uint32_t bufferSize,

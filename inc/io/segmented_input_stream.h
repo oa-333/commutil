@@ -50,16 +50,13 @@ public:
     SegmentedInputStream& operator=(const SegmentedInputStream&) = delete;
 
     /** @brief Destructor. */
-    ~SegmentedInputStream() { reset(); }
+    ~SegmentedInputStream() override { reset(); }
 
     /** @brief Resets the input stream (drops all buffers). */
-    void reset();
+    void reset() override;
 
     /** @brief Queries the stream size.  */
-    inline uint32_t size() const { return m_size; }
-
-    /** @brief Queries whether the stream is empty. */
-    inline bool empty() const { return size() == 0; }
+    uint32_t size() const override { return m_size; }
 
     /**
      * @brief Appends a buffer to the stream.
@@ -71,14 +68,14 @@ public:
 
     /**
      * @brief Peeks for a few bytes in the stream without pulling them.
-     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesRead (if
-     * supplied) contains the actual number of bytes that were read.
+     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesPeeked (if
+     * supplied) contains the actual number of bytes that were peeked.
      * @param buffer Received the bytes peek from the stream.
      * @param length The amount of bytes to peek.
      * @param[out] bytesPeeked Optionally on return contains the number of bytes actually peeked.
      * @return ErrorCode The operation result.
      */
-    ErrorCode peekBytes(char* buffer, uint32_t length, uint32_t* bytesRead = nullptr) override;
+    ErrorCode peekBytes(char* buffer, uint32_t length, uint32_t* bytesPeeked = nullptr) override;
 
     /**
      * @brief Reads bytes from the stream.
@@ -93,13 +90,13 @@ public:
 
     /**
      * @brief Skips the number of specified bytes in the stream.
-     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesRead (if
-     * supplied) contains the actual number of bytes that were read.
+     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesSkipped (if
+     * supplied) contains the actual number of bytes that were skipped.
      * @param length The amount of bytes to skip.
      * @param[out] bytesSkipped Optionally on return contains the number of bytes actually skipped.
      * @return ErrorCode The operation result.
      */
-    ErrorCode skipBytes(uint32_t length, uint32_t* bytesRead = nullptr) override;
+    ErrorCode skipBytes(uint32_t length, uint32_t* bytesSkipped = nullptr) override;
 
     /**
      * @brief Search for a specific pattern in the stream, without big-endian conversions.

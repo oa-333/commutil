@@ -32,14 +32,14 @@ public:
 
     /**
      * @brief Peeks for a few bytes in the stream without pulling them.
-     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesRead (if
-     * supplied) contains the actual number of bytes that were read.
+     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesPeeked (if
+     * supplied) contains the actual number of bytes that were peeked.
      * @param buffer Received the bytes peek from the stream.
      * @param length The amount of bytes to peek.
      * @param[out] bytesPeeked Optionally on return contains the number of bytes actually peeked.
      * @return ErrorCode The operation result.
      */
-    virtual ErrorCode peekBytes(char* buffer, uint32_t length, uint32_t* bytesRead = nullptr) = 0;
+    virtual ErrorCode peekBytes(char* buffer, uint32_t length, uint32_t* bytesPeeked = nullptr) = 0;
 
     /**
      * @brief Reads bytes from the stream.
@@ -54,8 +54,8 @@ public:
 
     /**
      * @brief Skips the number of specified bytes in the stream.
-     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesRead (if
-     * supplied) contains the actual number of bytes that were read.
+     * @note If the stream is depleted, then E_END_OF_STREAM is returned, and bytesSkipped (if
+     * supplied) contains the actual number of bytes that were skipped.
      * @param length The amount of bytes to skip.
      * @param[out] bytesSkipped Optionally on return contains the number of bytes actually skipped.
      * @return ErrorCode The operation result.

@@ -63,6 +63,11 @@ ErrorCode UdpServer::initializeTransport(uv_loop_t* serverLoop, uv_handle_t*& tr
     return ErrorCode::E_OK;
 }
 
+ErrorCode UdpServer::terminateTransport() {
+    m_connectionMap.destroy();
+    return ErrorCode::E_OK;
+}
+
 ErrorCode UdpServer::startTransport() {
     int res = uv_timer_start(&m_expireTimer, onTimerStatic, m_clientExpireSeconds * 1000,
                              m_clientExpireSeconds * 1000);
@@ -134,8 +139,18 @@ void UdpServer::onSendStatic(uv_udp_send_t* req, int status) {
 void UdpServer::onRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
                        const struct sockaddr* addr, unsigned flags) {
     (void)flags;
-    // ignore empty buffers
+
+    // cast carefully here...
+    UdpServer* dataServer = (UdpServer*)(DataServer*)handle->data;
+
+    // NOTE: if nread == 0 (e.g. would-block error), we still must release the buffer, but the addr
+    // parameter is null is this case, so we can't call the code below, instead we relase the buffer
+    // explicitly (this is a special case only in UdpServer)
     if (nread == 0) {
+        // release buffer
+        if (buf != nullptr && buf->base != nullptr) {
+            dataServer->getDataAllocator()->freeRequestBuffer(buf->base);
+        }
         return;
     }
 
@@ -173,10 +188,10 @@ void UdpServer::onRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
         connData = (UdpConnectionData*)m_connDataArray[connectionIndex];
         // TODO: check for error
     }
-    connData->m_lastAccessTimeMillis = getCurrentTimeMillis();
+    if (nread > 0) {
+        connData->m_lastAccessTimeMillis = getCurrentTimeMillis();
+    }
 
-    // cast carefully here...
-    UdpServer* dataServer = (UdpServer*)(DataServer*)handle->data;
     if (newConnection) {
         m_dataListener->onConnect(connData->m_connectionDetails, 0);
     }

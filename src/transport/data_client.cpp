@@ -86,7 +86,7 @@ int DataClient::waitReady() {
     return m_connectStatus;
 }
 
-ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall /* = false */,
+ErrorCode DataClient::write(const char* buffer, uint32_t length, uint32_t flags /* = 0 */,
                             void* userData /* = nullptr */) {
     // TODO: the caller should have the chance to install an allocator for buffers
     // next we also need a way to avoid all these allocations, for instance, the message layer has
@@ -104,21 +104,31 @@ ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall /
     // - allocate/free write request
 
     // allocate or copy buffer
-    uv_buf_t buf = syncCall ? uv_buf_init(const_cast<char*>(buffer), length)
-                            : uv_buf_init(m_dataAllocator->allocateRequestBuffer(length), length);
-    if (!syncCall) {
+    bool byRef = flags & COMMUTIL_MSG_WRITE_BY_REF;
+    // NOTE: if a buffer is passed not by reference, then it necessarily implies that the buffer
+    // must be disposed when write is done
+    if (!byRef) {
+        flags |= COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+    }
+    bool shouldDisposeBuffer = flags & COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+
+    // allocate and copy buffer if needed, otherwise just take pointer
+    uv_buf_t buf = byRef ? uv_buf_init(const_cast<char*>(buffer), length)
+                         : uv_buf_init(m_dataAllocator->allocateRequestBuffer(length), length);
+    if (!byRef) {
+        if (buf.base == nullptr) {
+            LOG_ERROR("Failed to allocate transport buffer of %" PRIu64 " bytes", length);
+            return ErrorCode::E_NOMEM;
+        }
         memcpy(buf.base, buffer, length);
-    } else if (buf.base == nullptr) {
-        LOG_ERROR("Failed to allocate transport buffer of %" PRIu64 " bytes", length);
-        return ErrorCode::E_NOMEM;
     }
 
     // prepare data for async call completion
     ClientBufferData* clientBufferData =
-        m_dataAllocator->allocateClientBufferData(this, buf, !syncCall);
+        m_dataAllocator->allocateClientBufferData(this, buf, shouldDisposeBuffer);
     if (clientBufferData == nullptr) {
         LOG_ERROR("Failed to allocate client-buffer pair, out of memory");
-        if (!syncCall) {
+        if (!byRef) {
             m_dataAllocator->freeRequestBuffer(buf.base);
         }
         return ErrorCode::E_NOMEM;
@@ -130,7 +140,7 @@ ErrorCode DataClient::write(const char* buffer, uint32_t length, bool syncCall /
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send write request on transport: %s", errorCodeToString(rc));
         m_dataAllocator->freeClientBufferData(clientBufferData);
-        if (!syncCall) {
+        if (!byRef) {
             m_dataAllocator->freeRequestBuffer(buf.base);
         }
         return rc;
@@ -187,7 +197,7 @@ void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram) {
         uv_close((uv_handle_t*)m_transport, onCloseStatic);
 
         // release buffer
-        if (buf->base != nullptr) {
+        if (buf != nullptr && buf->base != nullptr) {
             m_dataAllocator->freeRequestBuffer(buf->base);
         }
         return;
@@ -195,6 +205,10 @@ void DataClient::onRead(ssize_t nread, const uv_buf_t* buf, bool isDatagram) {
 
     // check if nothing happened
     if (nread == 0) {
+        // release buffer
+        if (buf != nullptr && buf->base != nullptr) {
+            m_dataAllocator->freeRequestBuffer(buf->base);
+        }
         return;
     }
 

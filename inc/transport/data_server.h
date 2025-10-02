@@ -13,6 +13,7 @@
 #include "comm_util_log.h"
 #include "io/io_def.h"
 #include "transport/data_allocator.h"
+#include "transport/data_def.h"
 #include "transport/data_listener.h"
 
 namespace commutil {
@@ -113,17 +114,16 @@ public:
      * @param buffer The data to send (serialized response). The buffer is copied before sending, so
      * the caller can recycle the buffer just right after this call.
      * @param length The buffer length.
-     * @param directBuffer Optionally specifies whether to avoid copying the input buffer, but
-     * rather using it directly. By default output buffer is copied.
-     * @param disposeBuffer Optionally specifies whether to dispose of the buffer after writing is
-     * complete (regardless of whether it is used as is without copying or if duplicated
-     * internally). By default the buffer will be disposed after using it.
+     * @param flags Optionally specifies write flags. Specify @ref COMMUTIL_MSG_WRITE_BY_REF to
+     * avoid copying the buffer. Specify @ref COMMUTIL_MSG_WRITE_DISPOSE_BUFFER to make sure the
+     * buffer is deleted when writing is done. In any case the buffer should be valid until the
+     * write operation by the transport layer is done.
      * @return The operation result.
      * @note When specifying to dispose of the input buffer, in case of failure, the caller is
      * responsible for deallocating the buffer.
      */
     ErrorCode replyMsg(const ConnectionDetails& connectionDetails, const char* buffer,
-                       uint32_t length, bool directBuffer = false, bool disposeBuffer = true);
+                       uint32_t length, uint32_t flags = 0);
 
 protected:
     DataServer(ByteOrder byteOrder)

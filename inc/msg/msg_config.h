@@ -62,6 +62,7 @@ struct COMMUTIL_API MsgConfig {
         : m_connectTimeoutMillis(COMMUTIL_MSG_DEFAULT_CONNECT_TIMEOUT_MILLIS),
           m_sendTimeoutMillis(COMMUTIL_MSG_DEFAULT_SEND_TIMEOUT_MILLIS),
           m_resendPeriodMillis(COMMUTIL_MSG_DEFAULT_RESEND_TIMEOUT_MILLIS),
+          m_expireTimeoutMillis(COMMUTIL_MSG_DEFAULT_EXPIRE_TIMEOUT_MILLIS),
           m_backlogLimitBytes(COMMUTIL_MSG_DEFAULT_BACKLOG_LIMIT_BYTES),
           m_shutdownTimeoutMillis(COMMUTIL_MSG_DEFAULT_SHUTDOWN_TIMEOUT_MILLIS),
           m_shutdownPollingTimeoutMillis(COMMUTIL_MSG_DEFAULT_SHUTDOWN_POLLING_TIMEOUT_MILLIS) {}

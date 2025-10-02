@@ -104,9 +104,9 @@ ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags /* = 0 */,
     // NOTE: we must use a dynamic buffer, since the transport layer uses it asynchronously in
     // another thread
     // TODO: we can use a static buffer up to some size in the request struct, and a flag denoting
-    // whether a static or dynamic buffer si being used
+    // whether a static or dynamic buffer is being used
     uint32_t msgLength = msg->getHeader().getLength();
-    char* buffer = new (std::nothrow) char[msgLength];
+    char* buffer = m_dataClient->getDataAllocator()->allocateRequestBuffer(msgLength);
     if (buffer == nullptr) {
         LOG_ERROR("Failed to allocate %u bytes for message buffer", msgLength);
         request->clearRequest();
@@ -117,7 +117,7 @@ ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags /* = 0 */,
     ErrorCode rc = msg->serialize(os);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to serialize message: %s", errorCodeToString(rc));
-        delete[] buffer;
+        m_dataClient->getDataAllocator()->freeRequestBuffer(buffer);
         request->clearRequest();
         return rc;
     }
@@ -127,10 +127,12 @@ ErrorCode MsgClient::sendMsg(Msg* msg, uint32_t requestFlags /* = 0 */,
     // also note that the message object is passed as user data, so that message sender can get back
     // the message being sent in the data loop listener interface. this is really awkward and future
     // versions may as well fix this
-    rc = m_dataClient->write(os.getBuffer(), os.getLength(), false, reuseRequest ? nullptr : msg);
+    uint32_t writeFlags = COMMUTIL_MSG_WRITE_BY_REF | COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+    rc = m_dataClient->write(os.getBuffer(), os.getLength(), writeFlags,
+                             reuseRequest ? nullptr : msg);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send message, transport layer error: %s", errorCodeToString(rc));
-        delete[] buffer;
+        m_dataClient->getDataAllocator()->freeRequestBuffer(buffer);
         request->clearRequest();
         return rc;
     }

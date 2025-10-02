@@ -73,6 +73,14 @@ ErrorCode MsgServer::terminate() {
                   errorCodeToString(rc));
         return rc;
     }
+    for (uint32_t i = 0; i < m_sessions.size(); ++i) {
+        MsgSession* session = m_sessions[i];
+        if (session != nullptr) {
+            m_sessionFactory->deleteMsgSession(session);
+            m_sessions[i] = nullptr;
+        }
+    }
+    m_sessions.clear();
     return ErrorCode::E_OK;
 }
 
@@ -218,7 +226,7 @@ ErrorCode MsgServer::getSession(const ConnectionDetails& connectionDetails, MsgS
 
 ErrorCode MsgServer::replyMsg(const ConnectionDetails& connectionDetails, Msg* msg) {
     uint32_t msgLength = msg->getHeader().getLength();
-    char* buffer = new (std::nothrow) char[msgLength];
+    char* buffer = m_dataServer->getDataAllocator()->allocateRequestBuffer(msgLength);
     if (buffer == nullptr) {
         LOG_ERROR("Failed to allocate %u bytes for reply message", msgLength);
         return ErrorCode::E_NOMEM;
@@ -227,14 +235,15 @@ ErrorCode MsgServer::replyMsg(const ConnectionDetails& connectionDetails, Msg* m
     ErrorCode rc = msg->serialize(os);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to serialize response message: %s", errorCodeToString(rc));
-        delete[] buffer;
+        m_dataServer->getDataAllocator()->freeRequestBuffer(buffer);
         return rc;
     }
 
-    rc = m_dataServer->replyMsg(connectionDetails, os.getBuffer(), os.getLength(), true, true);
+    uint32_t writeFlags = COMMUTIL_MSG_WRITE_BY_REF | COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+    rc = m_dataServer->replyMsg(connectionDetails, os.getBuffer(), os.getLength(), writeFlags);
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send response message: %s", errorCodeToString(rc));
-        delete[] buffer;
+        m_dataServer->getDataAllocator()->freeRequestBuffer(buffer);
         return rc;
     }
     // buffer deallocated by transport after write is finished

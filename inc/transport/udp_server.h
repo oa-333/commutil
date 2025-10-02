@@ -37,6 +37,9 @@ protected:
     // any derived class should redirect incoming data to
     ErrorCode initializeTransport(uv_loop_t* serverLoop, uv_handle_t*& transport) override;
 
+    // terminates the transport layer
+    ErrorCode terminateTransport() override;
+
     ErrorCode startTransport() override;
 
     ErrorCode stopTransport() override;

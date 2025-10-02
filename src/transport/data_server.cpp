@@ -53,6 +53,11 @@ ErrorCode DataServer::initialize(DataListener* listener, uint32_t maxConnections
 }
 
 ErrorCode DataServer::terminate() {
+    ErrorCode rc = terminateTransport();
+    if (rc != ErrorCode::E_OK) {
+        LOG_ERROR("Failed to terminate transport layer: %s", errorCodeToString(rc));
+        return rc;
+    }
     termConnDataArray();
     return ErrorCode::E_OK;
 }
@@ -94,27 +99,36 @@ ErrorCode DataServer::stop() {
 }
 
 ErrorCode DataServer::replyMsg(const ConnectionDetails& connectionDetails, const char* buffer,
-                               uint32_t length, bool directBuffer /* = false */,
-                               bool disposeBuffer /* = true */) {
+                               uint32_t length, uint32_t flags /* = 0 */) {
     if (getRunState() != RunState::RS_RUNNING) {
         return ErrorCode::E_INVALID_STATE;
     }
-    uv_buf_t buf = uv_buf_init(
-        directBuffer ? const_cast<char*>(buffer) : m_dataAllocator->allocateRequestBuffer(length),
-        length);
-    buf.len = length;
-    if (!directBuffer) {
+
+    // allocate or copy buffer
+    bool byRef = flags & COMMUTIL_MSG_WRITE_BY_REF;
+    // NOTE: if a buffer is passed not by reference, then it necessarily implies that the buffer
+    // must be disposed when write is done
+    if (!byRef) {
+        flags |= COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+    }
+    bool shouldDisposeBuffer = flags & COMMUTIL_MSG_WRITE_DISPOSE_BUFFER;
+
+    // allocate and copy buffer if needed, otherwise just take pointer
+    uv_buf_t buf = byRef ? uv_buf_init(const_cast<char*>(buffer), length)
+                         : uv_buf_init(m_dataAllocator->allocateRequestBuffer(length), length);
+    if (!byRef) {
+        if (buf.base == nullptr) {
+            LOG_ERROR("Failed to allocate transport buffer of %" PRIu64 " bytes", length);
+            return ErrorCode::E_NOMEM;
+        }
         memcpy(buf.base, buffer, length);
-    } else if (buf.base == nullptr) {
-        LOG_ERROR("Failed to allocate transport buffer of %" PRIu64 " bytes", length);
-        return ErrorCode::E_NOMEM;
     }
 
     ServerBufferData* serverBufferData = m_dataAllocator->allocateServerBufferData(
-        this, connectionDetails.getConnectionIndex(), buf, disposeBuffer);
+        this, connectionDetails.getConnectionIndex(), buf, shouldDisposeBuffer);
     if (serverBufferData == nullptr) {
         LOG_ERROR("Failed to allocate server buffer data, out of memory");
-        if (!directBuffer) {
+        if (!byRef) {
             m_dataAllocator->freeRequestBuffer(buf.base);
         }
         return ErrorCode::E_NOMEM;
@@ -124,7 +138,7 @@ ErrorCode DataServer::replyMsg(const ConnectionDetails& connectionDetails, const
     if (rc != ErrorCode::E_OK) {
         LOG_ERROR("Failed to send write response: %s", errorCodeToString(rc));
         m_dataAllocator->freeServerBufferData(serverBufferData);
-        if (!directBuffer) {
+        if (!byRef) {
             m_dataAllocator->freeRequestBuffer(buf.base);
         }
         return rc;
@@ -176,7 +190,7 @@ void DataServer::onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t*
         }
 
         // release buffer
-        if (buf->base != nullptr) {
+        if (buf != nullptr && buf->base != nullptr) {
             m_dataAllocator->freeRequestBuffer(buf->base);
         }
         return;
@@ -184,6 +198,10 @@ void DataServer::onRead(ConnectionData* connData, ssize_t nread, const uv_buf_t*
 
     // check if nothing happened
     if (nread == 0) {
+        // release buffer
+        if (buf != nullptr && buf->base != nullptr) {
+            m_dataAllocator->freeRequestBuffer(buf->base);
+        }
         return;
     }
 

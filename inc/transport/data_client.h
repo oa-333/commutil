@@ -13,14 +13,9 @@
 #include "io/io_def.h"
 #include "transport/connection_details.h"
 #include "transport/data_allocator.h"
+#include "transport/data_def.h"
 #include "transport/data_listener.h"
 #include "transport/data_loop_listener.h"
-
-// TODO: put this in a common place
-// TODO: this should be part of client side request entry, and each server side connection as a
-// static buffer ready for IO (if required buffer size exceeds static size then resort to dynamic)
-/** @brief The maximum buffer size allowed for transport layer (16 MB). */
-#define COMMUTIL_MAX_TRANSPORT_BUFFER_SIZE (16ul * 1024 * 1024)
 
 namespace commutil {
 
@@ -108,15 +103,18 @@ public:
 
     /**
      * @brief Writes a data buffer through the underlying transport channel.
+     * @note When specifying the @ref COMMUTIL_MSG_WRITE_DISPOSE_BUFFER flag and the call fails, it
+     * is the responsible of the caller to deallocate the buffer.
      * @param buffer The message buffer.
      * @param length The message length.
-     * @param syncCall Optionally specifies whether the call is synchronous (i.e. buffer should not
-     * be copied but rather passed by reference). By default call is asynchronous and the data
-     * buffer is copied before being sent asynchronously through the transport layer.
+     * @param flags Optionally specifies write flags. Specify @ref COMMUTIL_MSG_WRITE_BY_REF to
+     * avoid copying the buffer. Specify @ref COMMUTIL_MSG_WRITE_DISPOSE_BUFFER to make sure the
+     * buffer is deleted when writing is done. In any case the buffer should be valid until the
+     * write operation by the transport layer is done.
      * @param userData any user data that will be passed to the loop listener during onLoopSend().
      * @return The operation's result.
      */
-    ErrorCode write(const char* buffer, uint32_t length, bool syncCall = false,
+    ErrorCode write(const char* buffer, uint32_t length, uint32_t flags = 0,
                     void* userData = nullptr);
 
 protected:

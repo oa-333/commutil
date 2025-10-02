@@ -445,7 +445,6 @@ void TcpServer::handlePipeRead(IOTaskData* taskData, ssize_t nread, const uv_buf
     // sure to be correlated with callback order (instead of passing it through buffer in uv_write2)
     // this way if something bad happened, we just close the socket and continue, and the client on
     // the other end will get the disconnect event
-    (void)buf;
     LOG_TRACE("Incoming TCP connection arrived at IO task %u (status: %d)", taskData->m_taskId,
               (int)nread);
 
@@ -466,6 +465,11 @@ void TcpServer::handlePipeRead(IOTaskData* taskData, ssize_t nread, const uv_buf
     } else {
         LOG_TRACE("TCP connection %s located by IO task %u",
                   connectionData->m_connectionDetails.toString(), taskData->m_taskId);
+    }
+
+    // we first get rid of the dummy buffer (1 byte allocated on heap)
+    if (buf->base != nullptr) {
+        taskData->m_server->m_dataAllocator->freeRequestBuffer(buf->base);
     }
 
     // check read status
